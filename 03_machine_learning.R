@@ -1,75 +1,80 @@
-set.seed(42)
-train_idx <- createDataPartition(features_all$label, p = 0.7, list = FALSE)
-train_data <- features_all[train_idx, ]
-test_data  <- features_all[-train_idx, ]
+library(tidymodels)
 
-# Prepare matrices
-X_train <- as.matrix(train_data %>% select(-date_time, -label))
-y_train <- train_data$label
-X_test  <- as.matrix(test_data %>% select(-date_time, -label))
-y_test  <- test_data$label
+df_features <- read.csv("data/features/actigraphy_features.csv")
+df_features <- df_features |> mutate(worn = as.factor(case_when(worn == TRUE ~ 1, worn == FALSE ~ 0)))
+split_obj <- initial_split(df_features, prop = 0.7, strata = worn)
+train_df  <- training(split_obj)
+test_df   <- testing(split_obj)
 
-# ---------------------------
-# 7. Train XGBoost
-# ---------------------------
-dtrain <- xgb.DMatrix(data = X_train, label = y_train)
-dtest  <- xgb.DMatrix(data = X_test, label = y_test)
+non_predictors <- c("date_time")
 
-params <- list(
-  objective = "binary:logistic",
-  eval_metric = "logloss",
-  max_depth = 6,
-  eta = 0.1,
-  subsample = 0.8,
-  colsample_bytree = 0.8
-)
+rec <- recipe(worn ~ ., data = train_df) %>%
+  update_role(any_of(non_predictors), new_role = "id") %>%  # keep but not as predictors
+  step_rm(any_of(non_predictors)) %>%                       # remove from modeling matrix
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors()) %>%
+  step_normalize(all_predictors())
 
-model <- xgb.train(
-  params = params,
-  data = dtrain,
-  nrounds = 100,
-  watchlist = list(train = dtrain, eval = dtest),
-  verbose = 1
-)
+# XGBoost specifications
+xgb_spec <- boost_tree(
+  trees = 300,
+  learn_rate = 0.08,
+  tree_depth = 8,
+  min_n = 5,
+  sample_size = 0.8,  
+  mtry = 0.6,          
+  loss_reduction = 1.0
+) %>%
+  set_engine("xgboost", counts = FALSE) %>%
+  set_mode("classification")
 
-# ---------------------------
-# 8. Predictions + threshold
-# ---------------------------
-y_pred_probs <- predict(model, X_test)
+wf <- workflow() %>%
+  add_model(xgb_spec) %>%
+  add_recipe(rec)
+
+xgb_fit <- fit(wf, data = train_df)
+
+# Paper used threshold 0.55 and 3-epoch majority smoothing 
+test_probs <- predict(xgb_fit, new_data = test_df, type = "prob")$.pred_1
+
 threshold <- 0.55
-pred_labels <- ifelse(y_pred_probs >= threshold, 1, 0)
+test_pred <- ifelse(test_probs >= threshold, 1L, 0L)
 
-# ---------------------------
-# 9. Temporal smoothing
-# ---------------------------
 smooth_labels <- function(labels, window_size = 3) {
-  n <- length(labels)
-  smoothed <- labels
-  half_win <- floor(window_size / 2)
-  
+  n <- length(labels); out <- labels; half <- floor(window_size/2)
   for (i in seq_len(n)) {
-    start <- max(1, i - half_win)
-    end <- min(n, i + half_win)
-    window <- labels[start:end]
-    if (sum(window == 1) > sum(window == 0)) {
-      smoothed[i] <- 1
-    } else if (sum(window == 1) < sum(window == 0)) {
-      smoothed[i] <- 0
-    } # ties = keep original
+    s <- max(1, i - half); e <- min(n, i + half)
+    w <- labels[s:e]
+    if (sum(w == 1L) > sum(w == 0L)) out[i] <- 1L
+    else if (sum(w == 1L) < sum(w == 0L)) out[i] <- 0L
   }
-  return(smoothed)
+  out
 }
+test_pred_smooth <- smooth_labels(test_pred, window_size = 3)
 
-pred_labels_smoothed <- smooth_labels(pred_labels, window_size = 3)
+# Evaluate (yardstick)
+test_out <- test_df %>%
+  mutate(
+    .prob = test_probs,
+    .pred_raw = factor(test_pred, levels = c(0,1)),
+    .pred_smooth = factor(test_pred_smooth, levels = c(0,1))
+  )
 
-# ---------------------------
-# 10. Save results
-# ---------------------------
-results <- test_data %>%
-  mutate(pred_prob = y_pred_probs,
-         pred_label = pred_labels,
-         pred_label_smoothed = pred_labels_smoothed)
+metrics_raw   <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)
+raw_stats     <- metrics_raw(test_out, truth = worn, estimate = .pred_raw)
+smooth_stats  <- metrics_raw(test_out, truth = worn, estimate = .pred_smooth)
+auc_val       <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
 
-write.csv(results, "actigraphy_predictions_pipeline.csv", row.names = FALSE)
+print(raw_stats)
+print(smooth_stats)
+print(auc_val)
 
-cat("Pipeline complete. Features + predictions saved to actigraphy_predictions_pipeline.csv\n")
+# Save
+final_results <- test_df %>%
+  dplyr::select(any_of("date_time"), worn) %>%
+  mutate(
+    pred_prob = test_probs,
+    pred_label = as.integer(.pred_raw) - 1L,            
+    pred_label_smoothed = as.integer(.pred_smooth) - 1L
+  )
+write.csv(final_results, "actigraphy_predictions_tidymodels.csv", row.names = FALSE)
