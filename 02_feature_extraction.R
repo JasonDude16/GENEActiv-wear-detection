@@ -8,11 +8,10 @@ library(purrr)
 source("./helpers.R")
 
 df <- readRDS("./data/validation/interim/data_merged.RDS")
-df$merged <- df$df_merged |> filter(id %in% c("AS", "CD"))
 
 df_features_all <- df$df_merged |> 
   group_split(id) |> 
-  map(function(df) {
+  map_dfr(function(df) {
     
     df$index <- 1:nrow(df)
     df$date_time <- as.POSIXct(df$date_time, tz = "UTC")
@@ -58,4 +57,4 @@ df_features_all <- df$df_merged |>
     return(df_features_all)
   })
 
-write.csv(df_features_all |> bind_rows(), "data/features/actigraphy_features.csv", row.names = FALSE)
+write.csv(df_features_all, "data/features/actigraphy_features.csv", row.names = FALSE)
