@@ -10,7 +10,7 @@ split_obj <- group_initial_split(
 train_df  <- training(split_obj)
 test_df   <- testing(split_obj)
 
-non_predictors <- c("date_time", "id", "index")
+non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
 
 rec <- recipe(worn ~ ., data = train_df) %>%
   update_role(any_of(non_predictors), new_role = "id") %>%  # keep but not as predictors
