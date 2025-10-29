@@ -58,4 +58,4 @@ df_features_all <- df$df_merged |>
     return(df_features_all)
   })
 
-write.csv(df_features_all, "data/features/actigraphy_features.csv", row.names = FALSE)
+write.csv(df_features_all |> bind_rows(), "data/features/actigraphy_features.csv", row.names = FALSE)
