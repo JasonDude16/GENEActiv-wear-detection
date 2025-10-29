@@ -44,3 +44,64 @@ read_csv_event_markers <- function(file) {
 parse_ms <- function(x, tz = "UTC") {
   ymd_hms(sub(":(\\d{3})$", ".\\1", x), tz = tz)
 }
+
+compute_ts_features <- function(x) {
+  # Check for insufficient data or constant values
+  if (length(x) < 3 || var(x, na.rm = TRUE) == 0) {
+    # Return a data frame with NA values for all features
+    return(data.frame(
+      entropy = NA_real_,
+      max_level_shift = NA_real_,
+      max_var_shift = NA_real_,
+      max_kl_shift = NA_real_,
+      hurst = NA_real_,
+      std1st_der = NA_real_,
+      heterogeneity = NA_real_
+    ))
+  }
+  
+  tryCatch({
+    tsfeatures(
+      x,
+      features = c(
+        "entropy",
+        "max_level_shift",
+        "max_var_shift",
+        "max_kl_shift",
+        "hurst",
+        "std1st_der",
+        "heterogeneity"
+      )
+    )
+  }, error = function(e) {
+    # Return NA values if tsfeatures fails
+    data.frame(
+      entropy = NA_real_,
+      max_level_shift = NA_real_,
+      max_var_shift = NA_real_,
+      max_kl_shift = NA_real_,
+      hurst = NA_real_,
+      std1st_der = NA_real_,
+      heterogeneity = NA_real_
+    )
+  })
+}
+
+# Create sliding windows manually
+create_sliding_windows <- function(x, dates, window_size, complete = FALSE) {
+  n <- length(x)
+  windows <- list()
+  
+  for (i in seq_len(n)) {
+    start_idx <- max(1, i - window_size + 1)
+    
+    if (complete && (i - window_size + 1) < 1) {
+      next  # Skip incomplete windows
+    }
+    
+    windows[[i]] <- x[start_idx:i]
+  }
+  
+  # Remove NULL elements for complete = TRUE case
+  windows[!sapply(windows, is.null)]
+}
