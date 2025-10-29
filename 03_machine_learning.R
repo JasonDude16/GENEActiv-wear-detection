@@ -72,13 +72,3 @@ auc_val       <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
 print(raw_stats)
 print(smooth_stats)
 print(auc_val)
-
-# Save
-final_results <- test_df %>%
-  dplyr::select(any_of("date_time"), worn) %>%
-  mutate(
-    pred_prob = test_probs,
-    pred_label = as.integer(.pred_raw) - 1L,            
-    pred_label_smoothed = as.integer(.pred_smooth) - 1L
-  )
-write.csv(final_results, "actigraphy_predictions_tidymodels.csv", row.names = FALSE)
