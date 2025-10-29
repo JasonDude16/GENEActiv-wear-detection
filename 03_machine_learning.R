@@ -2,11 +2,15 @@ library(tidymodels)
 
 df_features <- read.csv("data/features/actigraphy_features.csv")
 df_features <- df_features |> mutate(worn = as.factor(case_when(worn == TRUE ~ 1, worn == FALSE ~ 0)))
-split_obj <- initial_split(df_features, prop = 0.7, strata = worn)
+split_obj <- group_initial_split(
+  df_features,
+  group = id,
+  prop = 0.7
+)
 train_df  <- training(split_obj)
 test_df   <- testing(split_obj)
 
-non_predictors <- c("date_time")
+non_predictors <- c("date_time", "id", "index")
 
 rec <- recipe(worn ~ ., data = train_df) %>%
   update_role(any_of(non_predictors), new_role = "id") %>%  # keep but not as predictors
