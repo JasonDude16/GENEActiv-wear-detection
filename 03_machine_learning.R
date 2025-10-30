@@ -1,27 +1,5 @@
 library(tidymodels)
 
-df_features <- read.csv("data/features/actigraphy_features.csv")
-df_features <- df_features |> mutate(worn = as.factor(case_when(worn == TRUE ~ 1, worn == FALSE ~ 0)))
-split_obj <- group_initial_split(
-  df_features,
-  group = id,
-  prop = 0.7
-)
-train_df  <- training(split_obj)
-test_df   <- testing(split_obj)
-
-train_df |> 
-  group_by(worn) |> 
-  summarise(count = n()) |> 
-  ungroup() |> 
-  mutate(prop = count / sum(count))
-
-test_df |> 
-  group_by(worn) |> 
-  summarise(count = n()) |> 
-  ungroup() |> 
-  mutate(prop = count / sum(count))
-
 non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
 
 rec <- recipe(worn ~ ., data = train_df) %>%
@@ -75,12 +53,3 @@ test_out <- test_df %>%
     .pred_raw = factor(test_pred, levels = c(0,1)),
     .pred_smooth = factor(test_pred_smooth, levels = c(0,1))
   )
-
-metrics_raw   <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)
-raw_stats     <- metrics_raw(test_out, truth = worn, estimate = .pred_raw)
-smooth_stats  <- metrics_raw(test_out, truth = worn, estimate = .pred_smooth)
-auc_val       <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
-
-print(raw_stats)
-print(smooth_stats)
-print(auc_val)
