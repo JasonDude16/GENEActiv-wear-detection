@@ -1,5 +1,4 @@
 library(tidyverse)
-library(yardstick)
 
 # ROC
 roc_df <- roc_curve(test_out, truth = worn, .prob, event_level = "second")
@@ -189,72 +188,104 @@ vip::vip(xgb_fit_obj, num_features = 20) +
   labs(title = "Global feature importance (XGBoost)")
 
 
-test_out %>%
-  filter(id == "CD") %>%
-  arrange(date_time) %>%
-  dplyr::slice(1:2000) %>%
+df_line <- test_out |>
+  filter(id == "AS") |>
+  slice(1:2000) |>
+  mutate(index = row_number())
+
+# Collapse consecutive runs of the same worn state
+bands <- df_line |>
+  transmute(index, worn_num = as.integer(as.character(worn)), mean_temp) |>
+  mutate(block = cumsum(worn_num != dplyr::lag(worn_num, default = first(worn_num)))) |>
+  group_by(block) |>
+  summarise(
+    worn_num = first(worn_num),
+    xmin = min(index) - 0.5,
+    xmax = max(index) + 0.5,
+    .groups = "drop"
+  ) |>
   mutate(
-    index = row_number(),
-    pred = as.integer(as.character(.pred_smooth)),
-    true = as.integer(as.character(worn)),
-    conf_case = case_when(
-      pred == 1 & true == 1 ~ "TP (wear)",
-      pred == 0 & true == 0 ~ "TN (nonwear)",
-      pred == 1 & true == 0 ~ "FP",
-      pred == 0 & true == 1 ~ "FN",
-      TRUE ~ "UNK"
-    ),
-    conf_case = factor(conf_case, levels = c("TN (nonwear)", "TP (wear)", "FP", "FN"))
-  ) %>%
-  # precompute ymin/ymax for the shaded region
-  {
-    y_min <- min(.$mean_temp, na.rm = TRUE)
-    y_max <- max(.$mean_temp, na.rm = TRUE)
-    mutate(., ymin = y_min, ymax = y_max)
-  } %>%
-  ggplot(aes(x = index)) +
-  # Background rectangles for FP and FN regions
+    ymin = min(df_line$mean_temp, na.rm = TRUE),
+    ymax = max(df_line$mean_temp, na.rm = TRUE)
+  )
+
+ggplot() +
+  # one rectangle per contiguous worn/non-worn run
   geom_rect(
-    data = function(df) df %>% filter(conf_case %in% c("FP", "FN")),
-    aes(
-      xmin = index - 0.5,
-      xmax = index + 0.5,
-      ymin = ymin,
-      ymax = ymax,
-      fill = conf_case
-    ),
-    inherit.aes = FALSE,
-    alpha = 0.25
+    data = bands,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = factor(worn_num)),
+    alpha = 0.22
   ) +
-  # Plot the main temperature trace
-  geom_line(aes(y = mean_temp), linewidth = 0.8, color = "black") +
-  # Overlay the true labels and predictions as thin bars near the bottom
-  geom_ribbon(
-    aes(
-      ymin = ymin,
-      ymax = ymin + (ymax - ymin) * as.integer(as.character(worn)) * 0.05
-    ),
-    fill = "black",
-    alpha = 0.5
-  ) +
-  geom_ribbon(
-    aes(
-      ymin = ymin,
-      ymax = ymin + (ymax - ymin) * as.integer(as.character(.pred_smooth)) * 0.05
-    ),
-    fill = "dodgerblue4",
-    alpha = 0.35
+  # the temperature trace on top
+  geom_line(
+    data = df_line,
+    aes(index, mean_temp),
+    linewidth = 0.8,
+    color = "black"
   ) +
   scale_fill_manual(
-    values = c("FP" = "#F39C12", "FN" = "#E74C3C"),
-    name = "Errors",
-    labels = c("False Positive", "False Negative")
+    name = "Worn state",
+    values = c("0" = "#E74C3C", "1" = "#27AE60"),
+    labels = c("0" = "Non-worn", "1" = "Worn")
   ) +
   labs(
-    title = "Mean temperature with highlighted FP/FN regions",
-    subtitle = "Black bar = true worn, blue bar = predicted worn",
+    title = "Mean temperature with worn / non-worn background bands",
     x = "Epoch index",
     y = "Mean temperature"
   ) +
-  theme_minimal() +
+  theme_classic() +
   theme(legend.position = "top")
+
+
+
+df_line <- test_out |>
+  filter(id == "AS") |>
+  arrange(date_time) |>
+  slice(1:2000) |>
+  mutate(
+    index    = row_number(),
+    pred_bin = as.integer(as.character(.pred_smooth)),  # 0/1
+    true_bin = as.integer(as.character(worn))           # 0/1
+  )
+
+# y-range for full-height tiles
+y_min <- min(df_line$mean_temp, na.rm = TRUE)
+y_max <- max(df_line$mean_temp, na.rm = TRUE)
+y_mid <- (y_min + y_max) / 2
+
+# keep only epochs that are FP or FN
+errors <- df_line |>
+  mutate(
+    err_case = case_when(
+      pred_bin == 1 & true_bin == 0 ~ "FP",
+      pred_bin == 0 & true_bin == 1 ~ "FN",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(err_case))
+
+ggplot() +
+  # one non-overlapping tile per error epoch, spanning full y-range
+  geom_tile(
+    data = errors,
+    aes(x = index, y = y_mid, fill = err_case),
+    width = 1, height = y_max - y_min, alpha = 0.28
+  ) +
+  # temperature trace on top
+  geom_line(
+    data = df_line,
+    aes(x = index, y = mean_temp),
+    linewidth = 0.9, color = "black"
+  ) +
+  scale_fill_manual(
+    values = c(FP = "#F39C12", FN = "#E74C3C"),
+    name   = "Errors",
+    labels = c(FP = "False Positive", FN = "False Negative")
+  ) +
+  labs(
+    title = "Per-epoch False Positives / False Negatives (no collapsing)",
+    x = "Epoch index", y = "Mean temperature"
+  ) +
+  theme_classic() +
+  theme(legend.position = "top")
+

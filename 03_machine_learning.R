@@ -10,6 +10,18 @@ split_obj <- group_initial_split(
 train_df  <- training(split_obj)
 test_df   <- testing(split_obj)
 
+train_df |> 
+  group_by(worn) |> 
+  summarise(count = n()) |> 
+  ungroup() |> 
+  mutate(prop = count / sum(count))
+
+test_df |> 
+  group_by(worn) |> 
+  summarise(count = n()) |> 
+  ungroup() |> 
+  mutate(prop = count / sum(count))
+
 non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
 
 rec <- recipe(worn ~ ., data = train_df) %>%
