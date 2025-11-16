@@ -5,12 +5,13 @@ df_features <- df_features |> mutate(worn = as.factor(case_when(worn == TRUE ~ 1
 split_obj <- group_initial_split(
   df_features,
   group = id,
-  prop = 0.7
+  prop = 0.6
 )
 train_df  <- training(split_obj)
 test_df   <- testing(split_obj)
 
 train_df |> 
+  group_by(id) |> 
   group_by(worn) |> 
   summarise(count = n()) |> 
   ungroup() |> 
@@ -21,6 +22,9 @@ test_df |>
   summarise(count = n()) |> 
   ungroup() |> 
   mutate(prop = count / sum(count))
+
+unique(train_df$id)
+unique(test_df$id)
 
 non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
 

@@ -41,6 +41,53 @@ read_csv_event_markers <- function(file) {
   return(df)
 }
 
+merge_events <- function(df_raw, df_events) {
+  
+  df_raw <- df_raw |> mutate(date_time = parse_ms(date_time)) 
+  
+  df_events <- df_events |>
+    mutate(
+      start = parse_ms(on_wrist_start),
+      end   = parse_ms(on_wrist_end)
+    ) 
+  
+  df_merged <- fuzzy_left_join(
+    df_raw,
+    df_events,
+    by = c(
+      "id" = "id",
+      "date_time" = "start",
+      "date_time" = "end"
+    ),
+    match_fun = list(`==`, `>=`, `<=`)
+  )
+  
+  valid_indices <- which(!is.na(df_merged$start))
+  first_valid <- valid_indices[1]
+  last_valid <- valid_indices[length(valid_indices)]
+  df_sub <- df_merged[first_valid:last_valid, ]
+  
+  df_sub <- df_sub |> 
+    mutate(worn = !is.na(on_wrist_start)) |>
+    select(-on_wrist_start, -on_wrist_end, -start, -end) |>
+    distinct() |> 
+    select(-id.y) |> 
+    rename(id = id.x)
+  
+  on_off_segments <- df_sub |>
+    arrange(id, date_time) |>
+    group_by(id) |>
+    mutate(run = cumsum(worn != dplyr::lag(worn, default = first(worn)))) |>
+    group_by(id, worn, run) |>
+    summarise(
+      xmin = min(date_time),
+      xmax = max(date_time) + seconds(5),
+      .groups = "drop"
+    )  
+  
+  return(list("df_merged" = df_sub, "on_off_segments" = on_off_segments))
+}
+
 parse_ms <- function(x, tz = "UTC") {
   ymd_hms(sub(":(\\d{3})$", ".\\1", x), tz = tz)
 }

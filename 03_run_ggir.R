@@ -1,14 +1,14 @@
 library(GGIR)
 library(GGIRread)
 
-GGIR(
+GGIR2(
   mode = c(1, 2, 3, 4, 5),
-  datadir = "./data/raw/AS-off-wrist-testing__100334_2025-01-14 15-23-08.bin",
+  datadir = "./data/raw/JD-ow-test__100336_2025-11-10 14-59-44.bin",
   outputdir = "./data/ggir",
-  studyname = "SEC",
+  studyname = "SEC3",
   do.report = c(2, 4, 5),
   overwrite = TRUE,
-  windowsizes = c(5, 900, 3600),
+  windowsizes = c(5, 600, 1800),
   do.cal = TRUE,
   do.enmo = TRUE,
   do.anglez = TRUE,
@@ -28,6 +28,7 @@ GGIR(
   mvpathreshold = c(100),
   excludefirstlast = FALSE,
   includenightcrit = 7,
+  epochvalues2csv = TRUE,
   #originally set to 16
   #=====================
   # Part 3 + 4:

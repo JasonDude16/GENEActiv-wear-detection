@@ -189,7 +189,7 @@ vip::vip(xgb_fit_obj, num_features = 20) +
 
 
 df_line <- test_out |>
-  filter(id == "AS") |>
+  filter(id == unique(test_out$id)[1]) |>
   slice(1:2000) |>
   mutate(index = row_number())
 
@@ -239,7 +239,7 @@ ggplot() +
 
 
 df_line <- test_out |>
-  filter(id == "AS") |>
+  filter(id == unique(test_out$id)[1]) |>
   arrange(date_time) |>
   slice(1:2000) |>
   mutate(
