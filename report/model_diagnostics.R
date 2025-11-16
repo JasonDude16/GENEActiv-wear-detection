@@ -1,5 +1,14 @@
 library(tidyverse)
 
+metrics_raw   <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)
+raw_stats     <- metrics_raw(test_out, truth = worn, estimate = .pred_raw)
+smooth_stats  <- metrics_raw(test_out, truth = worn, estimate = .pred_smooth)
+auc_val       <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
+
+print(raw_stats)
+print(smooth_stats)
+print(auc_val)
+
 # ROC
 roc_df <- roc_curve(test_out, truth = worn, .prob, event_level = "second")
 ggplot(roc_df, aes(x = 1 - specificity, y = sensitivity)) +
