@@ -17,15 +17,15 @@ df_features_all <- df$df_merged |>
     
     windows_short <- create_sliding_windows(
       activity, 
-      df$date_time, 
-      20, 
+      dates = df$date_time, 
+      window_size = 20, 
       complete = TRUE
     )
     
     windows_long <- create_sliding_windows(
       activity, 
-      df$date_time, 
-      60, 
+      dates = df$date_time,
+      window_size = 60, 
       complete = TRUE
     )
     

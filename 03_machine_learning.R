@@ -28,11 +28,11 @@ unique(test_df$id)
 
 non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
 
-rec <- recipe(worn ~ ., data = train_df) %>%
-  update_role(any_of(non_predictors), new_role = "id") %>%  # keep but not as predictors
-  step_rm(any_of(non_predictors)) %>%                       # remove from modeling matrix
-  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
-  step_zv(all_predictors()) %>%
+rec <- recipe(worn ~ ., data = train_df) |>
+  update_role(any_of(non_predictors), new_role = "id") |>
+  step_rm(any_of(non_predictors)) |>                    
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) |>
+  step_zv(all_predictors()) |>
   step_normalize(all_predictors())
 
 # XGBoost specifications
@@ -45,11 +45,11 @@ xgb_spec <- boost_tree(
   mtry = 0.6,          
   loss_reduction = 1.0
 ) %>%
-  set_engine("xgboost", counts = FALSE) %>%
+  set_engine("xgboost", counts = FALSE) |>
   set_mode("classification")
 
-wf <- workflow() %>%
-  add_model(xgb_spec) %>%
+wf <- workflow() |> 
+  add_model(xgb_spec) |>
   add_recipe(rec)
 
 xgb_fit <- fit(wf, data = train_df)
@@ -73,17 +73,17 @@ smooth_labels <- function(labels, window_size = 3) {
 test_pred_smooth <- smooth_labels(test_pred, window_size = 3)
 
 # Evaluate (yardstick)
-test_out <- test_df %>%
+test_out <- test_df |>
   mutate(
     .prob = test_probs,
     .pred_raw = factor(test_pred, levels = c(0,1)),
     .pred_smooth = factor(test_pred_smooth, levels = c(0,1))
   )
 
-metrics_raw   <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)
-raw_stats     <- metrics_raw(test_out, truth = worn, estimate = .pred_raw)
-smooth_stats  <- metrics_raw(test_out, truth = worn, estimate = .pred_smooth)
-auc_val       <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
+metrics_raw <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)
+raw_stats <- metrics_raw(test_out, truth = worn, estimate = .pred_raw)
+smooth_stats <- metrics_raw(test_out, truth = worn, estimate = .pred_smooth)
+auc_val  <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
 
 print(raw_stats)
 print(smooth_stats)
