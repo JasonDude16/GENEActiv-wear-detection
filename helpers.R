@@ -23,6 +23,8 @@ read_geneactiv_csv_raw <- function(file) {
   )
   df$id <- stringr::str_c(strsplit(basename(file), "")[[1]][1:2], collapse = "")
   
+  df$date_time <- as.POSIXct(df$date_time, tz = "America/Denver")
+  
   return(df)
 }
 
@@ -60,7 +62,8 @@ merge_events <- function(df_raw, df_events) {
       "date_time" = "end"
     ),
     match_fun = list(`==`, `>=`, `<=`)
-  )
+  ) |> 
+    mutate(date_time = as.POSIXct(date_time, tz = "America/Denver"))
   
   valid_indices <- which(!is.na(df_merged$start))
   first_valid <- valid_indices[1]
@@ -88,7 +91,7 @@ merge_events <- function(df_raw, df_events) {
   return(list("df_merged" = df_sub, "on_off_segments" = on_off_segments))
 }
 
-parse_ms <- function(x, tz = "UTC") {
+parse_ms <- function(x, tz = "America/Denver") {
   ymd_hms(sub(":(\\d{3})$", ".\\1", x), tz = tz)
 }
 
@@ -151,4 +154,47 @@ create_sliding_windows <- function(x, dates, window_size, complete = FALSE) {
   
   # Remove NULL elements for complete = TRUE case
   windows[!sapply(windows, is.null)]
+}
+
+collapse_by_index <- function(df, hz = 40, epoch_sec = 60) {
+  n_per_epoch <- hz * epoch_sec
+  
+  # Convert time to POSIXct if needed
+  df$time <- as.POSIXct(df$time, tz = "America/Denver")
+  
+  # Epoch ID based on row index
+  df$epoch <- floor((seq_len(nrow(df)) - 1) / n_per_epoch)
+  
+  # Get epoch timestamps: first timestamp in each chunk
+  epoch_times <- aggregate(time ~ epoch, data = df, FUN = function(x) x[1])
+  
+  # Compute means
+  agg <- aggregate(
+    cbind(x, y, z, nonwear_ggir) ~ epoch,
+    data = df,
+    FUN = mean
+  )
+  
+  # Merge in epoch times
+  res <- merge(epoch_times, agg, by = "epoch")
+  names(res) <- c("epoch_id", "date_time", "mean_x_axis", "mean_y_axis", "mean_z_axis", "nonwear_ggir")
+  
+  return(res[order(res$epoch_id), ][-1])
+}
+
+expand_NW_to_samples <- function(data_nrows, NWav, sf, windowsizes) {
+  
+  MediumEpochSize <- windowsizes[2] * sf
+  NMediumEpochs <- length(NWav)  
+  nw_sample <- rep(NA_integer_, data_nrows)
+  
+  for (h in seq_len(NMediumEpochs)) {
+    from_idx <- (h - 1) * MediumEpochSize + 1
+    to_idx   <- h * MediumEpochSize
+    to_idx <- min(to_idx, data_nrows)
+    nw_sample[from_idx:to_idx] <- NWav[h]
+  }
+  
+  # any trailing samples remain NA
+  return(nw_sample)
 }
