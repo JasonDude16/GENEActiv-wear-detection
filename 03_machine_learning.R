@@ -7,6 +7,8 @@ split_obj <- group_initial_split(
   group = id,
   prop = 0.6
 )
+
+set.seed(123)
 train_df  <- training(split_obj)
 test_df   <- testing(split_obj)
 

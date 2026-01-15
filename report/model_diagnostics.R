@@ -24,7 +24,7 @@ ggplot(roc_df, aes(x = 1 - specificity, y = sensitivity)) +
 cm <- conf_mat(test_out, truth = worn, estimate = .pred_smooth)
 autoplot(cm, type = "heatmap") +
   scale_fill_gradient(low = "white", high = "steelblue") +
-  labs(title = "Confusion matrix (smoothed, threshold = 0.55)")
+  labs(title = "Confusion matrix")
 
 
 ggplot(test_out, aes(x = .prob, fill = worn)) +
