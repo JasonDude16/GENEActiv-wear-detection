@@ -14,4 +14,5 @@
 **Next steps**:
 1. Merge the raw actigraphy output from GGIR (this has the temp data) and combine with the raw output from the GENEAciv software (this has the activity counts)
 2.	Extract the dynamical features (using the tsfeatures package in R) using time, activity counts, and temperature. 
-3.	Use the 3.0-6 version of GGIR
+3. Develop an algorithm for identifying wear/non-wear
+4.	Use the 3.0-6 version of GGIR

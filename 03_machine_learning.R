@@ -9,15 +9,12 @@ split_obj <- group_initial_split(
 )
 
 set.seed(123)
-train_df  <- training(split_obj)
-test_df   <- testing(split_obj)
+train_df <- training(split_obj)
+test_df <- testing(split_obj)
 
 train_df |> 
-  group_by(id) |> 
-  group_by(worn) |> 
-  summarise(count = n()) |> 
-  ungroup() |> 
-  mutate(prop = count / sum(count))
+  group_by(id, worn) |> 
+  summarise(count = n(), .groups = "drop")
 
 test_df |> 
   group_by(worn) |> 
@@ -72,14 +69,19 @@ smooth_labels <- function(labels, window_size = 3) {
   }
   out
 }
-test_pred_smooth <- smooth_labels(test_pred, window_size = 3)
 
-# Evaluate (yardstick)
 test_out <- test_df |>
+  mutate(.prob = test_probs) |>
+  arrange(id, date_time) |>
+  group_by(id) |>
   mutate(
-    .prob = test_probs,
-    .pred_raw = factor(test_pred, levels = c(0,1)),
-    .pred_smooth = factor(test_pred_smooth, levels = c(0,1))
+    .pred_raw = as.integer(.prob >= threshold),
+    .pred_smooth = smooth_labels(.pred_raw, window_size = 3)
+  ) |>
+  ungroup() |>
+  mutate(
+    .pred_raw = factor(.pred_raw, levels = c(0,1)),
+    .pred_smooth = factor(.pred_smooth, levels = c(0,1))
   )
 
 metrics_raw <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)

@@ -138,7 +138,7 @@ compute_ts_features <- function(x) {
 }
 
 # Create sliding windows manually
-create_sliding_windows <- function(x, dates, window_size, complete = FALSE) {
+create_sliding_windows <- function(x, window_size, complete = FALSE) {
   n <- length(x)
   windows <- list()
   
@@ -153,7 +153,7 @@ create_sliding_windows <- function(x, dates, window_size, complete = FALSE) {
   }
   
   # Remove NULL elements for complete = TRUE case
-  windows[!sapply(windows, is.null)]
+  return(windows[!sapply(windows, is.null)])
 }
 
 collapse_by_index <- function(df, hz = 40, epoch_sec = 60) {
