@@ -1,3 +1,6 @@
+library(dplyr)
+library(tidymodels)
+
 df_features <- read.csv("data/features/actigraphy_features.csv")
 df_features <- df_features |> mutate(worn = as.factor(case_when(worn == TRUE ~ 1, worn == FALSE ~ 0)))
 split_obj <- group_initial_split(
@@ -19,3 +22,6 @@ test_df |>
   summarise(count = n()) |> 
   ungroup() |> 
   mutate(prop = count / sum(count))
+
+saveRDS(train_df, "./data/train.RDS")
+saveRDS(test_df, "./data/test.RDS")
