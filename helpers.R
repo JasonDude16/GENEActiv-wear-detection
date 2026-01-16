@@ -198,3 +198,34 @@ expand_NW_to_samples <- function(data_nrows, NWav, sf, windowsizes) {
   # any trailing samples remain NA
   return(nw_sample)
 }
+
+# Helper: slope (degC per minute) from a vector
+slope_per_min <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 3 || var(x) == 0) return(NA_real_)
+  t <- seq_along(x) - 1
+  # slope from linear regression x ~ t
+  return(coef(lm(x ~ t))[2])
+}
+
+# Helper: drop from start to end (end - start)
+drop_end_minus_start <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2) return(NA_real_)
+  return(x[length(x)] - x[1])
+}
+
+# Helper: range
+range_safe <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2) return(NA_real_)
+  return(max(x) - min(x))
+}
+
+# Helper: corr
+corr_safe <- function(x, y) {
+  ok <- is.finite(x) & is.finite(y)
+  if (sum(ok) < 3) return(NA_real_)
+  if (sd(x[ok]) == 0 || sd(y[ok]) == 0) return(NA_real_)
+  return(cor(x[ok], y[ok]))
+}
