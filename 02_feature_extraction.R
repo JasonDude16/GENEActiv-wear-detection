@@ -41,54 +41,11 @@ df_features_all <- df |>
       df[[paste0("lag_", lag_val, "min")]] <- dplyr::lag(df$vector_sum, lag_val)
     }
     
-    # Temporal features
-    df <- df |> 
-      mutate(
-        minute = minute(date_time),
-        hour = hour(date_time),
-        wday = wday(date_time, week_start = 1),
-        sin_hour = sin(2 * pi * hour / 24),
-        cos_hour = cos(2 * pi * hour / 24),
-        sin_wday = sin(2 * pi * wday / 7),
-        cos_wday = cos(2 * pi * wday / 7)
-      )
-    
     # Make sure temp is numeric
     temp <- as.numeric(df$mean_temp)
     
     # First derivative of temperature (per minute)
     dtemp <- c(NA_real_, diff(temp))
-    
-    # Helper: slope (degC per minute) from a vector
-    slope_per_min <- function(x) {
-      x <- x[is.finite(x)]
-      if (length(x) < 3 || var(x) == 0) return(NA_real_)
-      t <- seq_along(x) - 1
-      # slope from linear regression x ~ t
-      coef(lm(x ~ t))[2]
-    }
-    
-    # Helper: drop from start to end (end - start)
-    drop_end_minus_start <- function(x) {
-      x <- x[is.finite(x)]
-      if (length(x) < 2) return(NA_real_)
-      x[length(x)] - x[1]
-    }
-    
-    # Helper: range
-    range_safe <- function(x) {
-      x <- x[is.finite(x)]
-      if (length(x) < 2) return(NA_real_)
-      max(x) - min(x)
-    }
-    
-    # Helper: corr
-    corr_safe <- function(x, y) {
-      ok <- is.finite(x) & is.finite(y)
-      if (sum(ok) < 3) return(NA_real_)
-      if (sd(x[ok]) == 0 || sd(y[ok]) == 0) return(NA_real_)
-      cor(x[ok], y[ok])
-    }
     
     # ---- ROLLING TEMP FEATURES ----
     for (k in seq_along(win_n)) {
