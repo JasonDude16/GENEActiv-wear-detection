@@ -156,32 +156,6 @@ create_sliding_windows <- function(x, window_size, complete = FALSE) {
   return(windows[!sapply(windows, is.null)])
 }
 
-collapse_by_index <- function(df, hz = 40, epoch_sec = 60) {
-  n_per_epoch <- hz * epoch_sec
-  
-  # Convert time to POSIXct if needed
-  df$time <- as.POSIXct(df$time, tz = "America/Denver")
-  
-  # Epoch ID based on row index
-  df$epoch <- floor((seq_len(nrow(df)) - 1) / n_per_epoch)
-  
-  # Get epoch timestamps: first timestamp in each chunk
-  epoch_times <- aggregate(time ~ epoch, data = df, FUN = function(x) x[1])
-  
-  # Compute means
-  agg <- aggregate(
-    cbind(x, y, z, nonwear_ggir) ~ epoch,
-    data = df,
-    FUN = mean
-  )
-  
-  # Merge in epoch times
-  res <- merge(epoch_times, agg, by = "epoch")
-  names(res) <- c("epoch_id", "date_time", "mean_x_axis", "mean_y_axis", "mean_z_axis", "nonwear_ggir")
-  
-  return(res[order(res$epoch_id), ][-1])
-}
-
 expand_NW_to_samples <- function(data_nrows, NWav, sf, windowsizes) {
   
   MediumEpochSize <- windowsizes[2] * sf

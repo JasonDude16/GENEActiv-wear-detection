@@ -89,7 +89,6 @@ df_features_all <- df |>
       )
       
       # A very useful indicator feature: low activity + cooling trend
-      # You can tune these thresholds later; this is a good starting point.
       df[[paste0("lowact_cooling_", label)]] <-
         as.integer(
           df[[paste0("temp_slope_", label)]] < -0.01 &  # cooling faster than 0.01 C/min

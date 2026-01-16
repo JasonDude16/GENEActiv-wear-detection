@@ -1,14 +1,14 @@
 library(GGIR)
 library(GGIRread)
 
-GGIR2(
+GGIR(
   mode = c(1, 2, 3, 4, 5),
-  datadir = "./data/raw/JD-ow-test__100336_2025-11-10 14-59-44.bin",
+  datadir = "./data/raw/AS-off-wrist-testing__100334_2025-01-14 15-23-08.bin",
   outputdir = "./data/ggir",
   studyname = "SEC",
   do.report = c(2, 4, 5),
   overwrite = TRUE,
-  windowsizes = c(5, 600, 1800),
+  windowsizes = c(5, 900, 3600),
   do.cal = TRUE,
   do.enmo = TRUE,
   do.anglez = TRUE,

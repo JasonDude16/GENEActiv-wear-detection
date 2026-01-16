@@ -60,12 +60,3 @@ test_out <- test_df |>
     .pred_raw = factor(.pred_raw, levels = c(0,1)),
     .pred_smooth = factor(.pred_smooth, levels = c(0,1))
   )
-
-metrics_raw <- metric_set(accuracy, sensitivity, specificity, bal_accuracy, f_meas, precision, recall)
-raw_stats <- metrics_raw(test_out, truth = worn, estimate = .pred_raw)
-smooth_stats <- metrics_raw(test_out, truth = worn, estimate = .pred_smooth)
-auc_val  <- roc_auc(test_out, truth = worn, .prob, event_level = "second")
-
-print(raw_stats)
-print(smooth_stats)
-print(auc_val)
