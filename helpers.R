@@ -137,42 +137,6 @@ compute_ts_features <- function(x) {
   })
 }
 
-# Create sliding windows manually
-create_sliding_windows <- function(x, window_size, complete = FALSE) {
-  n <- length(x)
-  windows <- list()
-  
-  for (i in seq_len(n)) {
-    start_idx <- max(1, i - window_size + 1)
-    
-    if (complete && (i - window_size + 1) < 1) {
-      next  # Skip incomplete windows
-    }
-    
-    windows[[i]] <- x[start_idx:i]
-  }
-  
-  # Remove NULL elements for complete = TRUE case
-  return(windows[!sapply(windows, is.null)])
-}
-
-expand_NW_to_samples <- function(data_nrows, NWav, sf, windowsizes) {
-  
-  MediumEpochSize <- windowsizes[2] * sf
-  NMediumEpochs <- length(NWav)  
-  nw_sample <- rep(NA_integer_, data_nrows)
-  
-  for (h in seq_len(NMediumEpochs)) {
-    from_idx <- (h - 1) * MediumEpochSize + 1
-    to_idx   <- h * MediumEpochSize
-    to_idx <- min(to_idx, data_nrows)
-    nw_sample[from_idx:to_idx] <- NWav[h]
-  }
-  
-  # any trailing samples remain NA
-  return(nw_sample)
-}
-
 # Helper: slope (degC per minute) from a vector
 slope_per_min <- function(x) {
   x <- x[is.finite(x)]
