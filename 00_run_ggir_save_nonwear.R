@@ -5,6 +5,12 @@ files <- list.files("./data/raw", full.names = TRUE)
 outputdir <- "./data/ggir"
 
 for (file in files) {
+  
+  id <- stringr::str_c((strsplit(basename(file), "")[[1]][1:2]), collapse = "")
+  if (file.exists(file.path(outputdir, paste0("output_", id)))) {
+    next
+  }
+  
   GGIR(
     mode = c(1, 2, 3, 4, 5),
     datadir = file,
@@ -56,8 +62,15 @@ for (file in files) {
 }
 
 folders <- list.files(outputdir)
-for (folder in folders) {
-  load(list.files(paste0(outputdir, folder, "/meta/basic/"), full.names = T))
+df_nonwear <- purrr::map_dfr(folders, function(folder) {
+  file <- list.files(file.path(outputdir, folder, "meta", "basic"), full.names = T)
+  id <- stringr::str_c((strsplit(basename(file), "")[[1]][6:7]), collapse = "")
+  load(file)
   imp <- g.impute(M, I)
-  cbind(imp$metashort, is_worn = ifelse(imp$r5long == 0, "wear", "non-wear"))
-}
+  out <- cbind(imp$metashort, ggir_is_worn = ifelse(imp$r5long == 0, "wear", "non-wear"))
+  out$date_time <- out$timestamp
+  out$id <- id
+  return(out[!colnames(out) %in% c("timestamp")])
+})
+
+write.csv(df_nonwear, "./data/validation/interim/data_ggir_nonwear.csv", row.names = FALSE)
