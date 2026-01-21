@@ -5,7 +5,7 @@ library(slider)
 library(purrr)
 source("./helpers.R")
 
-df <- readRDS("./data/validation/interim/data_merged.RDS")
+df <- readRDS("./data/validation/interim/data_merged.RDS")$df
 
 # parameters
 epoch_min <- 1
@@ -16,7 +16,6 @@ df_features_all <- df |>
   group_split(id) |> 
   map_dfr(function(df) {
     
-    df$index <- 1:nrow(df)
     df$date_time <- as.POSIXct(df$date_time, tz = "America/Denver")
     activity <- df$vector_sum
     

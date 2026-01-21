@@ -2,30 +2,33 @@ library(dplyr)
 library(tidymodels)
 
 df_features <- read.csv("data/features/actigraphy_features.csv")
-df_features <- df_features |> mutate(worn = as.factor(case_when(worn == TRUE ~ 1, worn == FALSE ~ 0)))
+df_features <- df_features |> mutate(label_is_worn = as.factor(case_when(
+  label_is_worn == TRUE ~ 1, label_is_worn == FALSE ~ 0
+)))
+
 split_obj <- group_initial_split(
   df_features,
   group = id,
   prop = 0.7
 )
-train_df  <- training(split_obj)
-test_df   <- testing(split_obj)
+train_df <- training(split_obj)
+test_df <- testing(split_obj)
 
 train_df |> 
-  group_by(worn) |> 
+  group_by(label_is_worn) |> 
   summarise(count = n()) |> 
   ungroup() |> 
   mutate(prop = count / sum(count))
 
 test_df |> 
-  group_by(worn) |> 
+  group_by(label_is_worn) |> 
   summarise(count = n()) |> 
   ungroup() |> 
   mutate(prop = count / sum(count))
 
 non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
 
-rec <- recipe(worn ~ ., data = train_df) |>
+rec <- recipe(label_is_worn ~ ., data = train_df) |>
   update_role(any_of(non_predictors), new_role = "id") |>
   step_rm(any_of(non_predictors)) |>                    
   step_dummy(all_nominal_predictors(), one_hot = TRUE) |>
