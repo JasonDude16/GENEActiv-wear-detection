@@ -22,8 +22,7 @@ read_geneactiv_csv_raw <- function(file) {
     col.names = col_names
   )
   df$id <- stringr::str_c(strsplit(basename(file), "")[[1]][1:2], collapse = "")
-  
-  df$date_time <- as.POSIXct(df$date_time, tz = "America/Denver")
+  df$date_time <- parse_ms(as.POSIXct(df$date_time, tz = "America/Denver"))
   
   return(df)
 }
@@ -33,8 +32,8 @@ read_csv_event_markers <- function(file) {
   
   df <- df |> 
     mutate(
-      on_wrist_start = format(mdy_hm(on_wrist_start), "%Y-%m-%d %H:%M:%S:000"),
-      on_wrist_end = format(mdy_hm(on_wrist_end), "%Y-%m-%d %H:%M:%S:000")
+      on_wrist_start = parse_ms(format(mdy_hm(on_wrist_start), "%Y-%m-%d %H:%M:%S:000")),
+      on_wrist_end = parse_ms(format(mdy_hm(on_wrist_end), "%Y-%m-%d %H:%M:%S:000"))
     )
   
   id_tmp <- strsplit(stringr::str_remove(basename(file), ".csv"), "")[[1]]
@@ -43,56 +42,74 @@ read_csv_event_markers <- function(file) {
   return(df)
 }
 
-merge_events <- function(df_raw, df_events) {
+adjust_log_time <- function(raw_time, log_time) {
+  raw_sec <- second(raw_time)[1]
+  if (raw_sec > 30) {
+    time_adj <- parse_ms(log_time) - (60 - seconds(raw_sec))  
+  } else {
+    time_adj <- parse_ms(log_time) + seconds(raw_sec)
+  }
+  return(time_adj)  
+}
+
+labels_to_long_format <- function(df_events) {
+  label_is_worn <- data.frame(matrix(ncol = 2, nrow = 0))
+  colnames(label_is_worn) <- c("date_time", "label_is_worn")
+  for (i in seq_along(1:nrow(df_events))) {
+    wear <- seq(df_events$on_wrist_start[i], df_events$on_wrist_end[i], 30)
+    df_wear <- data.frame("date_time" = wear, label_is_worn = "wear")
+    label_is_worn <- rbind(label_is_worn, df_wear)
+    if (i < nrow(df_events)) {
+      non_wear <- seq(df_events$on_wrist_end[i] + 30, df_events$on_wrist_start[i+1] - 30, 30)    
+      df_non_wear <- data.frame("date_time" = non_wear, label_is_worn = "non-wear")
+      label_is_worn <- rbind(label_is_worn, df_non_wear)
+    }
+  } 
+  return(label_is_worn)
+}
+
+merge_events <- function(df_raw, df_events, df_labels) {
   
-  df_raw <- df_raw |> mutate(date_time = parse_ms(date_time)) 
-  
-  df_events <- df_events |>
+  df_events <- df_events |> 
     mutate(
-      start = parse_ms(on_wrist_start),
-      end   = parse_ms(on_wrist_end)
-    ) 
+      on_wrist_start = adjust_log_time(df_raw$date_time, df_events$on_wrist_start),
+      on_wrist_end = adjust_log_time(df_raw$date_time, df_events$on_wrist_end)
+    )
   
-  df_merged <- fuzzy_left_join(
-    df_raw,
-    df_events,
-    by = c(
-      "id" = "id",
-      "date_time" = "start",
-      "date_time" = "end"
-    ),
-    match_fun = list(`==`, `>=`, `<=`)
-  ) |> 
-    mutate(date_time = as.POSIXct(date_time, tz = "America/Denver"))
+  res_labels_long <- labels_to_long_format(df_events)
   
-  valid_indices <- which(!is.na(df_merged$start))
-  first_valid <- valid_indices[1]
-  last_valid <- valid_indices[length(valid_indices)]
-  df_sub <- df_merged[first_valid:last_valid, ]
+  diffs <- second(df_raw$date_time[1]) - seq(0, 59, 5)
+  offset <- diffs[which.min(abs(diffs))]
+  df_labels$date_time <- df_labels$date_time + seconds(offset)
+  df_merged <- reduce(list(df_raw, df_labels, res_labels_long), left_join)
+  df_merged$label_is_worn[is.na(df_merged$label_is_worn)] <- "non-wear"
   
-  df_sub <- df_sub |> 
-    mutate(worn = !is.na(on_wrist_start)) |>
-    select(-on_wrist_start, -on_wrist_end, -start, -end) |>
-    distinct() |> 
-    select(-id.y) |> 
-    rename(id = id.x)
+  return(list("df_merged" = df_merged, "df_events" = df_events))
   
-  on_off_segments <- df_sub |>
-    arrange(id, date_time) |>
-    group_by(id) |>
-    mutate(run = cumsum(worn != dplyr::lag(worn, default = first(worn)))) |>
-    group_by(id, worn, run) |>
-    summarise(
-      xmin = min(date_time),
-      xmax = max(date_time) + seconds(5),
-      .groups = "drop"
-    )  
-  
-  return(list("df_merged" = df_sub, "on_off_segments" = on_off_segments))
 }
 
 parse_ms <- function(x, tz = "America/Denver") {
   ymd_hms(sub(":(\\d{3})$", ".\\1", x), tz = tz)
+}
+
+# Create sliding windows manually
+create_sliding_windows <- function(x, dates, window_size, complete = FALSE) {
+  n <- length(x)
+  windows <- list()
+  
+  for (i in seq_len(n)) {
+    start_idx <- max(1, i - window_size + 1)
+    
+    if (complete && (i - window_size + 1) < 1) {
+      next  # Skip incomplete windows
+    }
+    
+    windows[[i]] <- x[start_idx:i]
+  }
+  
+  # Remove NULL elements for complete = TRUE case
+  windows[!sapply(windows, is.null)]
+  
 }
 
 compute_ts_features <- function(x) {
