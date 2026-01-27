@@ -1,76 +1,10 @@
 library(tidyverse)
 library(scales)
 
-data_merged <- readRDS("./data/validation/interim/data_merged.RDS")
-
-plot_labels_over_time <- function(df, var, var_label, source_cols, date_time_col, gap_padding = 0.2, activity_height = 1.2) {
-
-  df <- df |>  
-    mutate(
-      day = lubridate::day(.data[[date_time_col]]), 
-      time = hms::as_hms(.data[[date_time_col]])
-    )
-  
-  df_long <- df |> 
-    select(all_of(c(source_cols, date_time_col)), day, time) |> 
-    pivot_longer(
-      cols = -c(date_time_col, day, time), 
-      names_to = "source", 
-      values_to = "wear"
-    )
-  
-  df_long <- df_long |>
-    mutate(
-      source = factor(source, levels = source_cols),
-      lane = as.integer(source)
-    )
-  
-  K <- length(source_cols)
-  rng <- range(df[[var]], na.rm = TRUE)
-  
-  df <- df |>
-    mutate(
-      mean_scaled = (.data[[var]] - rng[1]) / diff(rng),  
-      y_line = -gap_padding - mean_scaled * activity_height
-    )
-  
-  y_breaks <- c(-gap_padding - activity_height / 2, seq_len(K))
-  y_labels <- c(var_label, source_cols)
-  
-  ggplot() +
-    geom_tile(
-      data = df_long,
-      aes(x = time, y = lane, fill = wear),
-      height = 0.9,
-      show.legend = F
-    ) +
-    geom_line(
-      data = df,
-      aes(x = time, y = y_line),
-      linewidth = 0.5
-    ) +
-    scale_fill_manual(
-      values = c("non-wear" = "firebrick", "wear" = "steelblue"),
-      name = "State"
-    ) +
-    scale_y_continuous(
-      limits = c(-gap_padding - activity_height - 0.1, K + 0.5),
-      breaks = y_breaks,
-      labels = y_labels
-    ) +
-    labs(x = "Time", y = NULL) +
-    theme_minimal() +
-    theme(
-      panel.grid = element_blank(),
-      axis.text.y = element_text(size = 11),
-      legend.position = "bottom",
-      strip.text = element_text(face = "bold")
-    ) +
-    facet_wrap(~day, ncol = 1, labeller = labeller(day = function(x) paste("Day", as.integer(x))))
-}
+data_merged <- readRDS("./data/interim/data_merged.RDS")
 
 df_sub <- data_merged$df |> 
-  filter(id == "JD", !is.na(ggir_is_worn))
+  filter(id == "SL", !is.na(ggir_is_worn))
 
 p_labs_time <- df_sub |> 
   mutate(GGIR = ggir_is_worn, Truth = label_is_worn) |> 
@@ -78,6 +12,7 @@ p_labs_time <- df_sub |>
     var = "mean_x_axis", 
     var_label = "Activity", 
     source_cols = c("Truth", "GGIR"),
+    levels = c("non-wear", "wear"),
     date_time_col =  "date_time",
     activity_height = 2
   ) + 
