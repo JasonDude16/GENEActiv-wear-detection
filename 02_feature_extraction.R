@@ -5,7 +5,7 @@ library(slider)
 library(purrr)
 source("./helpers.R")
 
-df <- readRDS("./data/validation/interim/data_merged.RDS")$df
+df <- readRDS("./data/interim/data_merged.RDS")$df
 
 # parameters
 epoch_min <- 1

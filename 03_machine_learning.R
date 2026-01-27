@@ -1,36 +1,23 @@
 library(dplyr)
 library(tidymodels)
 
-df_features <- read.csv("data/features/actigraphy_features.csv")
-df_features <- df_features |> mutate(label_is_worn = as.factor(case_when(
-  label_is_worn == TRUE ~ 1, label_is_worn == FALSE ~ 0
-)))
+df_train <- read.csv("data/features/df_train.csv")
+df_train <- df_train |> mutate(label_is_worn = as.factor(label_is_worn))
 
-split_obj <- group_initial_split(
-  df_features,
-  group = id,
-  prop = 0.7
+non_predictors <- c(
+  "date_time",
+  "id",
+  "index",
+  "button_press_time_sum",
+  "ggir_is_worn",
+  "is_validation",
+  "run"
 )
-train_df <- training(split_obj)
-test_df <- testing(split_obj)
 
-train_df |> 
-  group_by(label_is_worn) |> 
-  summarise(count = n()) |> 
-  ungroup() |> 
-  mutate(prop = count / sum(count))
-
-test_df |> 
-  group_by(label_is_worn) |> 
-  summarise(count = n()) |> 
-  ungroup() |> 
-  mutate(prop = count / sum(count))
-
-non_predictors <- c("date_time", "id", "index", "button_press_time_sum")
-
-rec <- recipe(label_is_worn ~ ., data = train_df) |>
+rec <- recipe(label_is_worn ~ ., data = df_train) |>
   update_role(any_of(non_predictors), new_role = "id") |>
-  step_rm(any_of(non_predictors)) |>                    
+  step_rm(any_of(non_predictors)) |>  
+  step_filter_missing(threshold = 0.2) |> 
   step_dummy(all_nominal_predictors(), one_hot = TRUE) |>
   step_zv(all_predictors()) |>
   step_normalize(all_predictors())
@@ -52,35 +39,5 @@ wf <- workflow() |>
   add_model(xgb_spec) |>
   add_recipe(rec)
 
-xgb_fit <- fit(wf, data = train_df)
-
-# Paper used threshold 0.55 and 3-epoch majority smoothing 
-test_probs <- predict(xgb_fit, new_data = test_df, type = "prob")$.pred_1
-
-threshold <- 0.55
-test_pred <- ifelse(test_probs >= threshold, 1L, 0L)
-
-smooth_labels <- function(labels, window_size = 3) {
-  n <- length(labels); out <- labels; half <- floor(window_size/2)
-  for (i in seq_len(n)) {
-    s <- max(1, i - half); e <- min(n, i + half)
-    w <- labels[s:e]
-    if (sum(w == 1L) > sum(w == 0L)) out[i] <- 1L
-    else if (sum(w == 1L) < sum(w == 0L)) out[i] <- 0L
-  }
-  out
-}
-
-test_out <- test_df |>
-  mutate(.prob = test_probs) |>
-  arrange(id, date_time) |>
-  group_by(id) |>
-  mutate(
-    .pred_raw = as.integer(.prob >= threshold),
-    .pred_smooth = smooth_labels(.pred_raw, window_size = 3)
-  ) |>
-  ungroup() |>
-  mutate(
-    .pred_raw = factor(.pred_raw, levels = c(0,1)),
-    .pred_smooth = factor(.pred_smooth, levels = c(0,1))
-  )
+xgb_fit <- fit(wf, data = df_train)
+saveRDS(xgb_fit, "./models/xgb_fit.RDS")
