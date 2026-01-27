@@ -2,16 +2,25 @@ library(tidyverse)
 library(lubridate)
 source("helpers.R")
 
-data_ggir_nonwear <- read.csv("./data/validation/interim/data_ggir_nonwear.csv")
-df_labels <- data_ggir_nonwear |> select(-anglez, -ENMO) |> mutate(date_time = parse_ms(date_time))
-df_labels <- split(df_labels, f = df_labels$id)
+data_ggir_nonwear <- read.csv("./data/interim/data_ggir_nonwear.csv")
+data_ggir_nonwear <- data_ggir_nonwear |> select(-anglez, -ENMO) |> mutate(date_time = parse_ms(date_time))
+data_ggir_nonwear <- split(data_ggir_nonwear, f = data_ggir_nonwear$id)
 
-files <- list.files("./data/validation/raw/", full.names = T, pattern = ".csv")
-df_raw <- map(files, read_geneactiv_csv_raw)
-ids <- reduce(map(files, ~stringr::str_c(strsplit(basename(.x), "")[[1]][1:2], collapse = "")), c)
-names(df_raw) <- ids
+# get validation csvs 
+files <- list.files("./data/validation/raw/csv/", full.names = T, pattern = ".csv")
+df_raw_validation <- map(files, read_geneactiv_csv_raw)
+ids <- reduce(map(files, ~stringr::str_c(strsplit(basename(.x), "-")[[1]][1], collapse = "")), c)
+names(df_raw_validation) <- ids
 
-files <- list.files("./data/validation/event_markers/", full.names = T, pattern = ".csv")
+# get regular (non-validation) csvs 
+files <- list.files("./data/raw/csv/", full.names = T, pattern = ".csv")
+df_raw_non_validation <- map(files, read_geneactiv_csv_raw)
+ids <- reduce(map(files, ~stringr::str_c(strsplit(basename(.x), "-")[[1]][1], collapse = "")), c)
+names(df_raw_non_validation) <- ids
+
+df_raw <- c(df_raw_validation, df_raw_non_validation)
+
+files <- list.files("./data/validation/events/", full.names = T, pattern = ".csv")
 df_events <- map(files, read_csv_event_markers)
 
 ids <- reduce(map(files, function(file) {
@@ -21,14 +30,20 @@ ids <- reduce(map(files, function(file) {
 }), c)
 names(df_events) <- ids
 
-ids <- Reduce(intersect, lapply(list(df_raw, df_events, df_labels), names))
+ids <- unique(Reduce(c, lapply(list(df_raw, df_events, data_ggir_nonwear), names)))
 df_merged_lists <- setNames(
-  lapply(ids, \(id) list("df_raw" = df_raw[[id]], "df_events" = df_events[[id]], "df_labels" = df_labels[[id]])),
-  ids
+  lapply(
+    ids,
+    \(id) list(
+      "df_raw" = df_raw[[id]],
+      "df_ggir" = data_ggir_nonwear[[id]],
+      "df_events" = df_events[[id]]
+    )
+  ),   ids
 )
 
 df_merged <- map(df_merged_lists, function(x) {
-  merge_events(x$df_raw, x$df_events, x$df_labels)
+  merge_events(x$df_raw, x$df_ggir, x$df_events)
 })
 
 df_list <- list(
@@ -36,4 +51,4 @@ df_list <- list(
   "on_off_segments" = map_dfr(df_merged, ~.x$df_events)
 )
 
-saveRDS(df_list, file = "./data/validation/interim/data_merged.RDS")
+saveRDS(df_list, file = "./data/interim/data_merged.RDS")

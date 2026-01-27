@@ -1,21 +1,31 @@
 library(GGIR)
 library(GGIRread)
 
-files <- list.files("./data/raw", full.names = TRUE)
+validation_files <- list.files("./data/validation/raw/bin/", full.names = TRUE)
+non_validation_files <- list.files("./data/raw/bin/", full.names = TRUE)
 outputdir <- "./data/ggir"
 
-for (file in files) {
+for (file in c(validation_files, non_validation_files)) {
   
-  id <- stringr::str_c((strsplit(basename(file), "")[[1]][1:2]), collapse = "")
-  if (file.exists(file.path(outputdir, paste0("output_", id)))) {
+  id <- stringr::str_c((strsplit(basename(file), "-")[[1]][1]), collapse = "")
+  fn <- file.path(outputdir, paste0("output_", id))
+  if (stringr::str_detect(file, "validation")) {
+    fn <- paste0(fn, "_validation")
+    study_name <- paste0(id, "_validation")
+  } else {
+    study_name <- id
+  }
+  
+  if (file.exists(fn)) {
     next
   }
   
+  print(paste("Processing", id))
   GGIR(
     mode = c(1, 2, 3, 4, 5),
     datadir = file,
     outputdir = outputdir,
-    studyname = stringr::str_c((strsplit(basename(file), "")[[1]][1:2]), collapse = ""),
+    studyname = study_name,
     do.report = c(2, 4, 5),
     overwrite = TRUE,
     windowsizes = c(5, 900, 3600),
@@ -64,7 +74,8 @@ for (file in files) {
 folders <- list.files(outputdir)
 df_nonwear <- purrr::map_dfr(folders, function(folder) {
   file <- list.files(file.path(outputdir, folder, "meta", "basic"), full.names = T)
-  id <- stringr::str_c((strsplit(basename(file), "")[[1]][6:7]), collapse = "")
+  folder <- str_remove(folder, "output_")
+  id <- str_remove(folder, "_validation")
   load(file)
   imp <- g.impute(M, I)
   out <- cbind(imp$metashort, ggir_is_worn = ifelse(imp$r5long == 0, "wear", "non-wear"))
@@ -73,4 +84,4 @@ df_nonwear <- purrr::map_dfr(folders, function(folder) {
   return(out[!colnames(out) %in% c("timestamp")])
 })
 
-write.csv(df_nonwear, "./data/validation/interim/data_ggir_nonwear.csv", row.names = FALSE)
+write.csv(df_nonwear, "./data/interim/data_ggir_nonwear.csv", row.names = FALSE)
