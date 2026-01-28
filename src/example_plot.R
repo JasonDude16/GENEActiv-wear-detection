@@ -1,10 +1,16 @@
 library(tidyverse)
 library(scales)
 library(yardstick)
-source("helpers.R")
+source("./src/helpers.R")
 
-df_pred <- readRDS("./data/modeling/df_predictions.RDS")
+df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
 
+df_pred <- df_modeling |> 
+  mutate(
+    prob = predict(mod, new_data = df_modeling, type = "prob")$.pred_1,
+    ML_Pred = as.factor(ifelse(prob > .5, 1, 0))
+  )
+  
 subj_id <- "GZ"
 df_id <- df_pred |> filter(id == subj_id, !is.na(ggir_is_worn))
 
@@ -48,7 +54,7 @@ ggsave(paste0("./plots/", subj_id, "_plot.png"), plot = combined_plot, width = 1
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 df_pred |> 
-  filter(id == "24SEC05", !is.na(ggir_is_worn)) |> 
+  filter(id == "SEC1405", !is.na(ggir_is_worn)) |> 
   mutate(
     XGBoost = as.factor(ML_Pred),
     GGIR = as.factor(ggir_is_worn),
@@ -61,4 +67,4 @@ df_pred |>
     date_time_col =  "date_time",
     var_height = 2
   ) + 
-  ggtitle(paste0("Participant: 24SEC05"))
+  ggtitle(paste0("Participant: SEC1405"))
