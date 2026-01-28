@@ -18,7 +18,7 @@ library(tidymodels)
 
 ```{r}
 # CHOOSE MODEL TO EVALUATE
-mod <- readRDS("../../models/logreg_fit.RDS")
+mod <- readRDS("../../models/xgb_fit.RDS")
 ```
 
 ```{r}
@@ -255,6 +255,6 @@ df_pred |>
 
 ```{r}
 # extract fitted xgboost model from workflow
-xgb_fit_obj <- workflows::extract_fit_parsnip(mod_xgb)$fit
+xgb_fit_obj <- workflows::extract_fit_parsnip(mod)$fit
 vip::vip(xgb_fit_obj, num_features = 20) + labs(title = "Global feature importance")
 ```
