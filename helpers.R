@@ -74,7 +74,6 @@ merge_events <- function(df_raw, df_ggir, df_events = NULL) {
   offset <- diffs[which.min(abs(diffs))]
   df_ggir$date_time <- df_ggir$date_time + seconds(offset)
   
-  
   if (!is.null(df_events)) {
     df_events <- df_events |> 
       mutate(
@@ -105,7 +104,7 @@ parse_ms <- function(x, tz = "America/Denver") {
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 # Create sliding windows manually
-create_sliding_windows <- function(x, dates, window_size, complete = FALSE) {
+create_sliding_windows <- function(x, window_size, complete = FALSE) {
   n <- length(x)
   windows <- list()
   
@@ -167,10 +166,10 @@ compute_ts_features <- function(x) {
 }
 
 # Helper: slope (degC per minute) from a vector
-slope_per_min <- function(x) {
+slope_per_min <- function(x, epoch_min) {
   x <- x[is.finite(x)]
   if (length(x) < 3 || var(x) == 0) return(NA_real_)
-  t <- seq_along(x) - 1
+  t <- seq_along(x) * epoch_min
   # slope from linear regression x ~ t
   return(coef(lm(x ~ t))[2])
 }
@@ -199,74 +198,342 @@ corr_safe <- function(x, y) {
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
-plot_labels_over_time <- function(df, var, var_label, source_cols, levels, date_time_col, gap_padding = 0.2, activity_height = 1.2) {
+plot_labels_over_time <- function(
+    df,
+    vars,              # character vector of variable column names
+    var_labels,        # character vector same length as vars
+    source_cols,
+    levels,
+    date_time_col,
+    gap_padding = 0.2,
+    var_height = 1.2
+) {
   
-  stopifnot(length(levels) == 2)  
+  stopifnot(length(levels) == 2)
+  stopifnot(is.character(vars), length(vars) >= 1)
+  stopifnot(length(var_labels) == length(vars))
+
+  df <- df |>
+    dplyr::mutate(
+      month = lubridate::month(as.POSIXct(.data[[date_time_col]])),
+      day = lubridate::day(as.POSIXct(.data[[date_time_col]])),
+      month_day = paste0(month, "-", day),
+      time = hms::as_hms(as.POSIXct(.data[[date_time_col]]))
+    ) |> 
+    dplyr::select(-month, -day)
   
-  df <- df |>  
-    mutate(
-      day = lubridate::day(.data[[date_time_col]]), 
-      time = hms::as_hms(.data[[date_time_col]])
-    )
-  
-  df_long <- df |> 
-    select(all_of(c(source_cols, date_time_col)), day, time) |> 
-    pivot_longer(
-      cols = -c(date_time_col, day, time), 
-      names_to = "source", 
+  # Long for wear tiles
+  df_long <- df |>
+    dplyr::select(dplyr::all_of(c(source_cols, date_time_col)), month_day, time) |>
+    tidyr::pivot_longer(
+      cols = -c(date_time_col, month_day, time),
+      names_to = "source",
       values_to = "wear"
-    )
-  
-  df_long <- df_long |>
-    mutate(
+    ) |>
+    dplyr::mutate(
       source = factor(source, levels = source_cols),
-      lane = as.integer(source)
+      lane   = as.integer(source)
     )
   
   K <- length(source_cols)
-  rng <- range(df[[var]], na.rm = TRUE)
+  M <- length(vars)
   
-  df <- df |>
-    mutate(
-      mean_scaled = (.data[[var]] - rng[1]) / diff(rng),  
-      y_line = -gap_padding - mean_scaled * activity_height
+  # Build long df for the variable lines (each var scaled to 0..1 within itself)
+  df_vars_long <- df |>
+    dplyr::select(dplyr::all_of(c(date_time_col, "month_day", "time", vars))) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(vars),
+      names_to = "var",
+      values_to = "value"
+    ) |>
+    dplyr::group_by(var) |>
+    dplyr::mutate(
+      rng_min = min(value, na.rm = TRUE),
+      rng_max = max(value, na.rm = TRUE),
+      denom   = (rng_max - rng_min),
+      scaled  = dplyr::if_else(is.finite(denom) & denom > 0, (value - rng_min) / denom, 0.5)
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      var = factor(var, levels = vars),
+      var_i = as.integer(var),
+      # base for each var band:
+      # var 1 base = -gap_padding
+      # var 2 base = -gap_padding - (var_height + gap_padding)
+      # ...
+      base = -gap_padding - (var_i - 1) * (var_height + gap_padding),
+      y_line = base - scaled * var_height
     )
   
-  y_breaks <- c(-gap_padding - activity_height / 2, seq_len(K))
-  y_labels <- c(var_label, source_cols)
+  # y-axis breaks/labels:
+  # Put each var label centered in its band, then wear lanes 1..K
+  y_breaks_vars  <- (-gap_padding - (seq_len(M) - 1) * (var_height + gap_padding)) - var_height / 2
+  y_breaks_wear  <- seq_len(K)
+  y_breaks <- c(y_breaks_vars, y_breaks_wear)
   
+  y_labels <- c(var_labels, source_cols)
   
-  scale_clrs <- c("firebrick", "steelblue")
+  # plot limits: bottom should include last var band plus a little padding
+  y_min <- (-gap_padding - (M - 1) * (var_height + gap_padding)) - var_height - 0.1
+  y_max <- K + 0.5
+  
+  scale_clrs <- c("black", "darkgrey")
   names(scale_clrs) <- levels
   
-  ggplot() +
-    geom_tile(
+  ggplot2::ggplot() +
+    ggplot2::geom_tile(
       data = df_long,
-      aes(x = time, y = lane, fill = wear),
+      ggplot2::aes(x = time, y = lane, fill = wear),
       height = 0.9,
-      show.legend = F
+      show.legend = FALSE
     ) +
-    geom_line(
-      data = df,
-      aes(x = time, y = y_line),
+    ggplot2::geom_line(
+      data = df_vars_long,
+      ggplot2::aes(x = time, y = y_line, group = interaction(month_day, var)),
       linewidth = 0.5
     ) +
-    scale_fill_manual(
-      values = scale_clrs,
-      name = "State"
-    ) +
-    scale_y_continuous(
-      limits = c(-gap_padding - activity_height - 0.1, K + 0.5),
+    ggplot2::scale_fill_manual(values = scale_clrs, name = "State") +
+    ggplot2::scale_y_continuous(
+      limits = c(y_min, y_max),
       breaks = y_breaks,
       labels = y_labels
     ) +
-    labs(x = "Time", y = NULL) +
-    theme_minimal() +
-    theme(
-      panel.grid = element_blank(),
-      axis.text.y = element_text(size = 11),
+    ggplot2::labs(x = "Time", y = NULL) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      panel.grid = ggplot2::element_blank(),
+      axis.text.y = ggplot2::element_text(size = 11),
       legend.position = "bottom",
-      strip.text = element_text(face = "bold")
+      strip.text = ggplot2::element_text(face = "bold")
     ) +
-    facet_wrap(~day, ncol = 1, labeller = labeller(day = function(x) paste("Day", as.integer(x))))
+    ggplot2::facet_wrap(
+      ~month_day,
+      ncol = 1
+    )
+}
+
+plot_confusion_matrix <- function(
+    df,
+    ref_col,                 
+    class_cols,              
+    title = NULL,
+    x_lab = "Prediction",
+    y_lab = "Reference",
+    positive_label = "Wear",
+    negative_label = "Non-wear",
+    pos_value = "wear",
+    neg_value = "non-wear",
+    drop_na = TRUE
+) {
+  
+  # --- helper: map to 0/1 if needed ---
+  to01 <- function(x) {
+    if (is.numeric(x) || is.integer(x) || is.logical(x)) {
+      as.integer(x)
+    } else {
+      dplyr::case_when(
+        tolower(as.character(x)) == tolower(pos_value) ~ 1L,
+        tolower(as.character(x)) == tolower(neg_value) ~ 0L,
+        TRUE ~ NA_integer_
+      )
+    }
+  }
+  
+  df2 <- df |>
+    dplyr::mutate(
+      ref01 = to01(.data[[ref_col]])
+    ) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(class_cols),
+      names_to = "classifier",
+      values_to = "pred_raw"
+    ) |>
+    dplyr::mutate(
+      pred01 = to01(pred_raw)
+    )
+  
+  if (drop_na) {
+    df2 <- df2 |>
+      dplyr::filter(!is.na(ref01), !is.na(pred01))
+  }
+  
+  # ---- 1) Confusion matrix counts ----
+  cm <- df2 |>
+    dplyr::group_by(classifier) |>
+    dplyr::summarise(
+      TP = sum(ref01 == 1 & pred01 == 1, na.rm = TRUE),
+      TN = sum(ref01 == 0 & pred01 == 0, na.rm = TRUE),
+      FP = sum(ref01 == 0 & pred01 == 1, na.rm = TRUE),
+      FN = sum(ref01 == 1 & pred01 == 0, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(N = TP + TN + FP + FN)
+  
+  # ---- 2) Metrics ----
+  metrics <- cm |>
+    dplyr::mutate(
+      Accuracy = dplyr::if_else(N > 0, (TP + TN) / N, NA_real_),
+      Sensitivity = dplyr::if_else(TP + FN > 0, TP / (TP + FN), NA_real_),
+      Specificity = dplyr::if_else(TN + FP > 0, TN / (TN + FP), NA_real_)
+    ) |>
+    dplyr::select(classifier, Accuracy, Sensitivity, Specificity, N)
+  
+  # ---- 3) Long format for plotting ----
+  cm_long <- cm |>
+    tidyr::pivot_longer(TP:FN, names_to = "cell", values_to = "count") |>
+    dplyr::mutate(
+      pct = dplyr::if_else(N > 0, count / N, NA_real_),
+      Reference  = dplyr::if_else(cell %in% c("TP", "FN"), positive_label, negative_label),
+      Prediction = dplyr::if_else(cell %in% c("TP", "FP"), positive_label, negative_label),
+      cell_type = dplyr::case_when(
+        cell %in% c("TP", "TN") ~ "Correct",
+        cell == "FP"            ~ "False Positive",
+        cell == "FN"            ~ "False Negative",
+        TRUE ~ NA_character_
+      ),
+      label = sprintf("%s\n(n=%d)", scales::percent(pct, accuracy = 0.1), count)
+    )
+  
+  # ---- 4) Plot ----
+  p <- ggplot2::ggplot(cm_long, ggplot2::aes(x = Prediction, y = Reference)) +
+    ggplot2::geom_tile(
+      ggplot2::aes(fill = cell_type),
+      color = "white",
+      linewidth = 0.7,
+      show.legend = FALSE
+    ) +
+    ggplot2::geom_text(
+      ggplot2::aes(label = label),
+      size = 4.2,
+      lineheight = 0.95
+    ) +
+    ggplot2::facet_wrap(~ classifier) +
+    ggplot2::scale_fill_manual(
+      values = c(
+        "Correct"        = "lightgreen",
+        "False Positive" = "salmon",
+        "False Negative" = "salmon"
+      ),
+      name = NULL
+    ) +
+    # ggplot2::geom_label(
+    #   data = metrics,
+    #   ggplot2::aes(
+    #     x = 1.5, y = 1.5,
+    #     label = sprintf(
+    #       "Acc: %s\nSens: %s\nSpec: %s\nN: %d",
+    #       scales::percent(Accuracy, accuracy = 0.1),
+    #       scales::percent(Sensitivity, accuracy = 0.1),
+    #       scales::percent(Specificity, accuracy = 0.1),
+    #       N
+    #     )
+    #   ),
+    #   inherit.aes = FALSE,
+    #   size = 3.6,
+    #   label.size = 0.25,
+    #   label.r = grid::unit(0.15, "lines"),
+    #   fill = "white",
+    #   alpha = 0.95
+    # ) +
+    ggplot2::labs(
+      title = title,
+      x = x_lab,
+      y = y_lab
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      panel.grid = ggplot2::element_blank(),
+      strip.text = ggplot2::element_text(face = "bold"),
+      legend.position = "bottom"
+    )
+  
+  list(
+    plot = p,
+    cm = cm,
+    metrics = metrics,
+    cm_long = cm_long
+  )
+}
+
+plot_metrics_bars <- function(
+    metrics_df,
+    facet = TRUE,
+    percent = TRUE,
+    title = NULL,
+    base_size = 14,
+    palette = "Dark2",
+    label_size = 4
+) {
+  stopifnot(is.data.frame(metrics_df))
+  stopifnot("N" %in% names(metrics_df))
+  stopifnot("classifier" %in% names(metrics_df))
+  
+  df_long <- metrics_df |>
+    tidyr::pivot_longer(
+      cols = -c(classifier, N),
+      names_to = "Metric",
+      values_to = "Value"
+    ) |>
+    dplyr::mutate(
+      Value_plot = if (percent) Value * 100 else Value,
+      label = if (percent) {
+        sprintf("%.1f%%", Value_plot)
+      } else {
+        sprintf("%.2f", Value_plot)
+      },
+      Metric = factor(Metric, levels = unique(Metric))
+    )
+  
+  p <- ggplot2::ggplot(
+    df_long,
+    ggplot2::aes(
+      x = Metric,
+      y = Value_plot,
+      fill = if (!facet) classifier else NULL
+    )
+  ) +
+    ggplot2::geom_bar(
+      stat = "identity",
+      position = if (facet) "stack" else ggplot2::position_dodge(width = 0.8),
+      width = 0.7,
+      show.legend = !facet
+    ) +
+    ggplot2::geom_text(
+      ggplot2::aes(
+        label = label,
+        group = if (!facet) classifier else NULL
+      ),
+      position = if (facet) {
+        ggplot2::position_stack(vjust = 1.05)
+      } else {
+        ggplot2::position_dodge(width = 0.8)
+      },
+      vjust = -0.2,
+      size = label_size,
+      show.legend = FALSE
+    ) +
+    ggplot2::theme_classic(base_size = base_size) +
+    ggplot2::theme(
+      axis.title.x = ggplot2::element_blank(),
+      legend.position = "bottom"
+    )
+  
+  # ---- Facet or combined ----
+  if (facet) {
+    p <- p + ggplot2::facet_wrap(~ classifier)
+  } else {
+    p <- p +
+      ggplot2::scale_fill_manual(values = c("black", "darkred"), name = "Classifier")
+  }
+  
+  # ---- Labels ----
+  if (!is.null(title)) {
+    p <- p + ggplot2::labs(title = title)
+  }
+  
+  if (percent) {
+    p <- p + ggplot2::labs(y = "Value (%)")
+  }
+  
+  p
 }

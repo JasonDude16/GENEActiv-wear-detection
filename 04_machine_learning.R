@@ -1,17 +1,17 @@
 library(dplyr)
 library(tidymodels)
 
-df_train <- read.csv("data/features/df_train.csv")
-df_train <- df_train |> mutate(label_is_worn = as.factor(label_is_worn))
+df_modeling <- readRDS("data/modeling/df_modeling.RDS")
+df_train <- df_modeling |> filter(train_test == "train")
 
 non_predictors <- c(
   "date_time",
-  "id",
-  "index",
   "button_press_time_sum",
+  "id",
   "ggir_is_worn",
   "is_validation",
-  "run"
+  "run",
+  "train_test"
 )
 
 rec <- recipe(label_is_worn ~ ., data = df_train) |>
@@ -24,13 +24,13 @@ rec <- recipe(label_is_worn ~ ., data = df_train) |>
 
 # XGBoost specifications
 xgb_spec <- boost_tree(
-  trees = 300,
-  learn_rate = 0.08,
-  tree_depth = 8,
-  min_n = 5,
-  sample_size = 0.8,  
-  mtry = 0.6,          
-  loss_reduction = 1.0
+  trees = 800,
+  learn_rate = 0.03,
+  tree_depth = 5,
+  min_n = 30,
+  sample_size = 0.7,  
+  mtry = 0.5,          
+  loss_reduction = 5
 ) %>%
   set_engine("xgboost", counts = FALSE) |>
   set_mode("classification")
