@@ -1,6 +1,6 @@
 library(tidyverse)
 library(lubridate)
-source("helpers.R")
+source("./src/helpers.R")
 
 data_ggir_nonwear <- read.csv("./data/interim/data_ggir_nonwear.csv")
 data_ggir_nonwear <- data_ggir_nonwear |> select(-anglez, -ENMO) |> mutate(date_time = parse_ms(date_time))
