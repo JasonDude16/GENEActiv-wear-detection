@@ -1,0 +1,257 @@
+---
+title: "Model Performance"
+author: "Jason Dude"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Import
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+mod <- readRDS("../models/logreg_fit.RDS")
+
+df_modeling <- readRDS("../data/modeling/df_predictions.RDS")
+df_modeling <- df_modeling |> filter(is_validation, train_test == "test")
+
+# add predictions to test
+df_pred <- df_modeling |> 
+  mutate(
+    prob = predict(mod, new_data = df_modeling, type = "prob")$.pred_1,
+    ML_Pred = as.factor(ifelse(prob > .5, 1, 0))
+  )
+```
+
+## Standard metrics
+
+```{r}
+metrics <- metric_set(
+  accuracy,
+  sensitivity,
+  specificity,
+  bal_accuracy,
+  f_meas,
+  precision,
+  recall
+)
+metrics(df_pred, truth = label_is_worn, estimate = ML_Pred)
+```
+
+```{r}
+roc_df <- roc_curve(df_pred, truth = label_is_worn, prob, event_level = "second")
+
+roc_df |> 
+  ggplot(aes(x = 1 - specificity, y = sensitivity)) +
+  geom_path(linewidth = 1) +
+  geom_abline(linetype = "dashed") +
+  coord_equal() +
+  labs(
+    title = "ROC curve (test set)",
+    x = "False Positive Rate (1 - Specificity)",
+    y = "True Positive Rate (Sensitivity)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+roc_auc(df_pred, truth = label_is_worn, prob, event_level = "second")
+```
+
+```{r}
+cm <- conf_mat(df_pred, truth = label_is_worn, estimate = ML_Pred)
+autoplot(cm, type = "heatmap") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Confusion matrix")
+```
+
+## Performance across time
+
+```{r}
+# Per-epoch correctness after smoothing
+err_df <- df_pred |>
+  mutate(
+    correct = as.integer(ML_Pred == label_is_worn),
+    hour = lubridate::hour(date_time),
+    wday = lubridate::wday(date_time, label = TRUE, week_start = 1)
+  )
+
+# Accuracy by hour of day
+acc_hour <- err_df |> 
+  group_by(hour) |> 
+  summarise(
+    acc = mean(correct),
+    n = n(),
+    .groups = "drop"
+  )
+
+acc_hour |> 
+  ggplot(aes(hour, acc)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "Accuracy by hour of day", x = "Hour", y = "Accuracy") +
+  theme_minimal()
+```
+
+```{r}
+# Accuracy by weekday
+acc_wday <- err_df |> 
+  group_by(wday) |> 
+  summarise(acc = mean(correct), n = n(), .groups = "drop")
+
+acc_wday |> 
+  ggplot(aes(wday, acc, group = 1)) +
+  geom_line() +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Accuracy by weekday",
+    x = "Weekday",
+    y = "Accuracy"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# mark misclassifications
+err_points <- df_pred |>
+  mutate(
+    is_error = ML_Pred != label_is_worn,
+    hour = lubridate::hour(date_time)
+  )
+
+# Error rate by hour
+err_by_hour <- err_points |>
+  group_by(hour) |>
+  summarise(err_rate = mean(is_error), n = n(), .groups = "drop")
+
+err_by_hour |> 
+  ggplot(aes(hour, err_rate)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Error rate by hour of day",
+    x = "Hour of day",
+    y = "Error rate"
+  ) +
+  theme_minimal()
+```
+
+## Performance by length of epoch
+
+```{r}
+epoch_len_sec <- 30
+bin_size_epochs <- 20
+
+episode_perf <- df_pred |>
+  arrange(id, date_time) |>
+  mutate(
+    truth_bin = if_else(label_is_worn == 1, 1L, 0L),
+    pred_bin = if_else(ML_Pred == 1, 1L, 0L),
+    new_block = truth_bin != dplyr::lag(truth_bin, default = first(truth_bin)),
+    block_id  = cumsum(new_block)
+  ) |>
+  group_by(id, block_id, truth_bin) |>
+  summarise(
+    len_epochs = n(),
+    pred_majority = as.integer(mean(pred_bin) >= 0.5),
+    correct_majority = as.integer(pred_majority == unique(truth_bin)),
+    .groups = "drop_last"
+  ) |>
+  ungroup() |>
+  filter(truth_bin == 0L) |>  # nonwear episodes
+  mutate(
+    len_min = len_epochs * epoch_len_sec / 60,
+    bin = cut(
+      len_epochs,
+      breaks = seq(0, max(len_epochs) + bin_size_epochs, by = bin_size_epochs),
+      include.lowest = TRUE, 
+      right = FALSE
+    )
+  ) |>
+  group_by(bin) |>
+  summarise(
+    mean_acc = mean(correct_majority),
+    median_acc = median(correct_majority),
+    n_episodes = n(),
+    .groups = "drop"
+  )
+
+episode_perf |> 
+  ggplot(aes(x = bin, y = mean_acc, group = 1)) +
+  geom_line() +
+  geom_point(aes(size = n_episodes)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Episode-level accuracy vs. nonwear episode length",
+    x = "True nonwear episode length (epochs, ~10 min bins)",
+    y = "Mean majority accuracy",
+    size = "Episodes"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Performance by ID
+
+```{r}
+by_pid <- df_pred |>
+  group_by(id) |>
+  summarise(
+    acc = mean(ML_Pred == label_is_worn),
+    bal_acc = yardstick::bal_accuracy_vec(label_is_worn, ML_Pred),
+    n = n(),
+    .groups = "drop"
+  ) |>
+  arrange(acc)
+
+by_pid |> 
+  ggplot(aes(reorder(id, acc), acc)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Accuracy by participant",
+    x = "Participant",
+    y = "Accuracy"
+  ) +
+  theme_minimal()
+```
+
+## Probability vs classifications
+
+```{r}
+# Probability vs. truth with misclassifications highlighted
+df_pred |> 
+  ggplot(aes(x = prob, y = as.numeric(label_is_worn) - 1)) +
+  geom_jitter(aes(color = ML_Pred != label_is_worn), height = 0.05, alpha = 0.4) +
+  geom_vline(xintercept = 0.55, linetype = "dashed") +
+  scale_color_manual(
+    values = c("FALSE" = "grey50", "TRUE" = "#E64B35"), 
+    name = "Misclassified"
+  ) +
+  scale_y_continuous(breaks = c(0,1), labels = c("nonwear","wear")) +
+  labs(
+    title = "Predicted probability vs. true class",
+    x = "Predicted probability (wear)",
+    y = "True class"
+  ) +
+  theme_minimal()
+```
+
+## Feature importance
+
+```{r}
+# extract fitted xgboost model from workflow
+xgb_fit_obj <- workflows::extract_fit_parsnip(mod_xgb)$fit
+vip::vip(xgb_fit_obj, num_features = 20) + labs(title = "Global feature importance")
+```
