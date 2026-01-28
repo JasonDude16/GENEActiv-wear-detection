@@ -1,7 +1,7 @@
 library(dplyr)
 library(tidymodels)
 
-df_features <- map_dfr(list.files("data/features/", full.names = TRUE), read.csv)
+df_features <- map_dfr(list.files("./data/features/", full.names = TRUE), read.csv)
 
 df_features <- df_features |> 
   mutate(

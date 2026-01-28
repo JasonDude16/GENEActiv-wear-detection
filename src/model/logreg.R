@@ -1,7 +1,7 @@
 library(dplyr)
 library(tidymodels)
 
-df_modeling <- readRDS("../../data/modeling/df_modeling.RDS")
+df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
 df_train <- df_modeling |> filter(train_test == "train")
 
 rec <- recipe(
@@ -28,4 +28,4 @@ wf <- workflow() |>
   add_recipe(rec)
 
 logreg_fit <- fit(wf, data = df_train)
-saveRDS(logreg_fit, "../../models/logreg_fit.RDS")
+saveRDS(logreg_fit, "./models/logreg_fit.RDS")

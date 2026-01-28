@@ -1,7 +1,7 @@
 library(dplyr)
 library(tidymodels)
 
-df_modeling <- readRDS("data/modeling/df_modeling.RDS")
+df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
 df_train <- df_modeling |> filter(train_test == "train")
 
 non_predictors <- c(
