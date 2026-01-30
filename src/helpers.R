@@ -69,7 +69,7 @@ labels_to_long_format <- function(df_events) {
 }
 
 merge_events <- function(df_raw, df_ggir, df_events = NULL) {
-  
+
   diffs <- second(df_raw$date_time[1]) - seq(0, 59, 5)
   offset <- diffs[which.min(abs(diffs))]
   df_ggir$date_time <- df_ggir$date_time + seconds(offset)
@@ -215,8 +215,10 @@ plot_labels_over_time <- function(
 
   df <- df |>
     dplyr::mutate(
-      month = lubridate::month(as.POSIXct(.data[[date_time_col]])),
-      day = lubridate::day(as.POSIXct(.data[[date_time_col]])),
+      month = as.character(lubridate::month(as.POSIXct(.data[[date_time_col]]))),
+      month = ifelse(nchar(month) == 1, paste0("0", month), month),
+      day = as.character(lubridate::day(as.POSIXct(.data[[date_time_col]]))),
+      day = ifelse(nchar(day) == 1, paste0("0", day), day),
       month_day = paste0(month, "-", day),
       time = hms::as_hms(as.POSIXct(.data[[date_time_col]]))
     ) |> 
