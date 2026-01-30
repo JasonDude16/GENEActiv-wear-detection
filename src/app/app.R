@@ -10,7 +10,7 @@ min_date <- min(tmp$date_time)
 max_date <- max(tmp$date_time)
 
 ui <- fluidPage(
-  titlePanel("GGIR Wear/Non-wear Classification"),
+  titlePanel("Geneactiv Wear/Non-wear Classification"),
   sidebarLayout(
     sidebarPanel(
       selectInput("type", "Type", choices = c("All", "Train", "Test")),
