@@ -39,7 +39,7 @@ df_merged_lists <- setNames(
       "df_ggir" = data_ggir_nonwear[[id]],
       "df_events" = df_events[[id]]
     )
-  ),   ids
+  ), ids
 )
 
 df_merged <- map(df_merged_lists, function(x) {

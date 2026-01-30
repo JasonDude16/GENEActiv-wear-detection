@@ -1,5 +1,6 @@
 library(GGIR)
 library(GGIRread)
+library(stringr)
 
 validation_files <- list.files("./data/validation/raw/bin/", full.names = TRUE)
 non_validation_files <- list.files("./data/raw/bin/", full.names = TRUE)
