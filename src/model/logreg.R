@@ -28,4 +28,4 @@ wf <- workflow() |>
   add_recipe(rec)
 
 logreg_fit <- fit(wf, data = df_train)
-saveRDS(logreg_fit, "./models/logreg_fit.RDS")
+saveRDS(logreg_fit, "./models/logreg.RDS")

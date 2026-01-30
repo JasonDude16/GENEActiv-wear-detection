@@ -418,25 +418,6 @@ plot_confusion_matrix <- function(
       ),
       name = NULL
     ) +
-    # ggplot2::geom_label(
-    #   data = metrics,
-    #   ggplot2::aes(
-    #     x = 1.5, y = 1.5,
-    #     label = sprintf(
-    #       "Acc: %s\nSens: %s\nSpec: %s\nN: %d",
-    #       scales::percent(Accuracy, accuracy = 0.1),
-    #       scales::percent(Sensitivity, accuracy = 0.1),
-    #       scales::percent(Specificity, accuracy = 0.1),
-    #       N
-    #     )
-    #   ),
-    #   inherit.aes = FALSE,
-    #   size = 3.6,
-    #   label.size = 0.25,
-    #   label.r = grid::unit(0.15, "lines"),
-    #   fill = "white",
-    #   alpha = 0.95
-    # ) +
     ggplot2::labs(
       title = title,
       x = x_lab,
@@ -525,7 +506,7 @@ plot_metrics_bars <- function(
     p <- p + ggplot2::facet_wrap(~ classifier)
   } else {
     p <- p +
-      ggplot2::scale_fill_manual(values = c("black", "darkred"), name = "Classifier")
+      ggplot2::scale_fill_brewer(palette = "Dark2", name = "Classifier")
   }
   
   # ---- Labels ----

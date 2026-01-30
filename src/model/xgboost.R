@@ -40,4 +40,4 @@ wf <- workflow() |>
   add_recipe(rec)
 
 xgb_fit <- fit(wf, data = df_train)
-saveRDS(xgb_fit, "./models/xgb_fit.RDS")
+saveRDS(xgb_fit, "./models/xgb.RDS")

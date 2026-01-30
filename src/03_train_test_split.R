@@ -32,6 +32,7 @@ df_train$train_test <- "train"
 df_test <- testing(split_obj)
 df_test$train_test <- "test"
 
+# train and test class proportions
 df_train |> 
   group_by(label_is_worn) |> 
   summarise(count = n()) |> 
@@ -44,7 +45,20 @@ df_test |>
   ungroup() |> 
   mutate(prop = count / sum(count))
 
-saveRDS(
-  rbind(df_train, df_test, df_features_non_validation),
-  "./data/modeling/df_modeling.RDS"
+df_all <- rbind(df_train, df_test, df_features_non_validation)
+
+# re-order for clarity (all non-features listed first in dataset)
+df_all <- df_all |> 
+  select(
+    date_time,
+    id,
+    label_is_worn,
+    ggir_is_worn,
+    train_test,
+    is_validation,
+    run,
+    button_press_time_sum,
+    everything()
 )
+
+saveRDS(df_all, "./data/modeling/df_modeling.RDS")
