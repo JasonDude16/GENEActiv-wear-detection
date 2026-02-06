@@ -8,6 +8,7 @@ models <- list.files("../../models/")
 models <- tools::file_path_sans_ext(models)
 
 df_modeling <- readRDS("../../data/modeling/df_modeling.RDS")
+vars <- df_modeling |> select(matches("mean|sd|temp")) |> colnames()
 all_ids <- unique(df_modeling$id)
 
 tmp <- df_modeling |> filter(id == all_ids[1])
@@ -36,6 +37,13 @@ ui <- fluidPage(
         end = max_date,
         min = min_date,
         max = max_date
+      ),
+      selectInput(
+        "variables",
+        label = "Variables to plot",
+        choices = vars,
+        multiple = TRUE,
+        selected = c("sd_z_axis")
       ),
       selectInput(
         "classifiers",
@@ -174,8 +182,7 @@ server <- function(input, output, session) {
 
     p_labs_time <- d_pred |>
       plot_labels_over_time(
-        vars = c("mean_x_axis", "mean_temp"),
-        var_label = c("Activity", "Temperature"),
+        vars = input$variables,
         source_cols = input$classifiers,
         levels = c(0, 1),
         date_time_col = "date_time",

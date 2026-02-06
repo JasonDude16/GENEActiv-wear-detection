@@ -200,18 +200,17 @@ corr_safe <- function(x, y) {
 
 plot_labels_over_time <- function(
     df,
-    vars,              # character vector of variable column names
-    var_labels,        # character vector same length as vars
+    vars,              
     source_cols,
     levels,
     date_time_col,
+    var_labels = NULL,      
     gap_padding = 0.2,
     var_height = 1.2
 ) {
   
   stopifnot(length(levels) == 2)
   stopifnot(is.character(vars), length(vars) >= 1)
-  stopifnot(length(var_labels) == length(vars))
 
   df <- df |>
     dplyr::mutate(
@@ -273,7 +272,11 @@ plot_labels_over_time <- function(
   y_breaks_wear  <- seq_len(K)
   y_breaks <- c(y_breaks_vars, y_breaks_wear)
   
-  y_labels <- c(var_labels, source_cols)
+  if (is.null(var_labels)) {
+    y_labels <- c(vars, source_cols)  
+  } else {
+    y_labels <- c(var_labels, source_cols) 
+  }
   
   # plot limits: bottom should include last var band plus a little padding
   y_min <- (-gap_padding - (M - 1) * (var_height + gap_padding)) - var_height - 0.1
