@@ -28,8 +28,9 @@ df_modeling <- df_modeling |> filter(is_validation, train_test == "test")
 # add classifications with standard probability cutoff of 0.5 
 df_pred <- df_modeling |> 
   mutate(
-    prob = predict(mod, new_data = df_modeling, type = "prob")$.pred_1,
-    ML_Pred = as.factor(ifelse(prob > .5, 1, 0))
+    prob_1 = predict(mod, new_data = df_modeling, type = "prob")$.pred_1,
+    prob_0 = 1 - prob_1,
+    ML_Pred = as.factor(ifelse(prob_1 > .5, 1, 0))
   )
 ```
 
@@ -49,7 +50,7 @@ metrics(df_pred, truth = label_is_worn, estimate = ML_Pred)
 ```
 
 ```{r}
-roc_df <- roc_curve(df_pred, truth = label_is_worn, prob, event_level = "second")
+roc_df <- roc_curve(df_pred, truth = label_is_worn, prob_1, event_level = "second")
 
 roc_df |> 
   ggplot(aes(x = 1 - specificity, y = sensitivity)) +
@@ -65,7 +66,7 @@ roc_df |>
 ```
 
 ```{r}
-roc_auc(df_pred, truth = label_is_worn, prob, event_level = "second")
+roc_auc(df_pred, truth = label_is_worn, prob_1, event_level = "second")
 ```
 
 ```{r}
@@ -235,7 +236,7 @@ by_pid |>
 ```{r}
 # Probability vs. truth with misclassifications highlighted
 df_pred |> 
-  ggplot(aes(x = prob, y = as.numeric(label_is_worn) - 1)) +
+  ggplot(aes(x = prob_1, y = as.numeric(label_is_worn) - 1)) +
   geom_jitter(aes(color = ML_Pred != label_is_worn), height = 0.05, alpha = 0.4) +
   geom_vline(xintercept = 0.55, linetype = "dashed") +
   scale_color_manual(
@@ -257,4 +258,70 @@ df_pred |>
 # extract fitted xgboost model from workflow
 xgb_fit_obj <- workflows::extract_fit_parsnip(mod)$fit
 vip::vip(xgb_fit_obj, num_features = 20) + labs(title = "Global feature importance")
+```
+
+## Smoothing predictions
+
+```{r}
+smooth_nonwear_20min <- function(df, cutoff = 0.4, window_mins = 20, thresh = 0.80,
+                                 p_nonwear_col = ".pred_0", epoch_seconds = 30) {
+  
+  # Number of rows in half-window
+  half_window_n <- round((window_mins * 60 / 2) / epoch_seconds)
+  
+  # Raw classification
+  p_nonwear <- df[[p_nonwear_col]]
+  class_raw <- ifelse(p_nonwear >= cutoff, "non_wear", "wear")
+  is_nonwear_raw <- class_raw == "non_wear"
+  
+  n <- nrow(df)
+  idx_nonwear <- which(is_nonwear_raw)
+  force_label <- rep(NA_character_, n)
+  
+  for (i in idx_nonwear) {
+    left  <- max(1, i - half_window_n)
+    right <- min(n, i + half_window_n)
+    
+    in_window <- left:right
+    prop_nonwear <- mean(is_nonwear_raw[in_window])
+    
+    if (prop_nonwear < thresh) {
+      force_label[in_window] <- "wear"
+    } else {
+      force_label[in_window] <- "non_wear"
+    }
+  }
+  
+  class_smooth <- ifelse(is.na(force_label), class_raw, force_label)
+  
+  df$class_raw <- class_raw
+  df$class_smooth <- class_smooth
+  df$pred_is_worn_raw <- as.integer(class_raw == "wear")
+  df$pred_is_worn_smooth <- as.integer(class_smooth == "wear")
+  
+  return(df)
+}
+```
+
+```{r}
+df_pred_smoothed <- smooth_nonwear_20min(
+  df = df_pred,
+  cutoff = 0.5,
+  window_mins = 20,
+  thresh = 0.80,
+  p_nonwear_col = "prob_0",
+  epoch_seconds = 30
+)
+```
+
+```{r}
+df_pred_smoothed |>
+  group_by(id) |>
+  summarise(
+    acc = mean(pred_is_worn_smooth == label_is_worn),
+    bal_acc = yardstick::bal_accuracy_vec(label_is_worn, ML_Pred),
+    n = n(),
+    .groups = "drop"
+  ) |>
+  arrange(acc)
 ```
