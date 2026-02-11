@@ -3,6 +3,10 @@ library(tidymodels)
 
 df_features <- map_dfr(list.files("./data/features/", full.names = TRUE), read.csv)
 
+df_kv <- df_features |> filter(id == "KV")
+df_kv_sliced <- df_kv |> slice(1:round(nrow(df_kv)/2))
+df_features <- df_features |> filter(id != "KV") |> rbind(df_kv_sliced)
+
 df_features <- df_features |> 
   mutate(
     label_is_worn = as.factor(case_when(
@@ -19,7 +23,7 @@ df_features_validation <- df_features |> filter(is_validation)
 df_features_non_validation <- df_features |> filter(!is_validation)
 df_features_non_validation$train_test <- NA
 
-set.seed(1)
+set.seed(111)
 split_obj <- group_initial_split(
   df_features_validation,
   group = id,
