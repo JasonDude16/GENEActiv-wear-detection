@@ -18,7 +18,7 @@ library(tidymodels)
 
 ```{r}
 # CHOOSE MODEL TO EVALUATE
-mod <- readRDS("../../models/xgb_fit.RDS")
+mod <- readRDS("../../models/xgb.RDS")
 ```
 
 ```{r}

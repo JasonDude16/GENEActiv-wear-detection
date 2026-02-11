@@ -176,7 +176,7 @@ server <- function(input, output, session) {
     d_pred <- df_pred()
     d_subj <- df_subj_filt()
     
-    if (length(input$classifiers) == 0) {
+    if (length(input$classifiers) == 0 || length(input$variables) == 0) {
       return(NULL)
     }
 
