@@ -2,6 +2,10 @@ library(dplyr)
 library(purrr)
 library(tidymodels)
 
+df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
+
+# -------------------------------------------------------------------------------------------------------------------------------------
+
 # helper for fitting and evaluating model once 
 fit_eval_once_oob <- function(df, boot_ids, threshold = 0.55) {
   
