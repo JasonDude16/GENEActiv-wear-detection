@@ -3,6 +3,7 @@ library(purrr)
 library(tidymodels)
 
 df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
+df_modeling <- df_modeling |> filter(train_test %in% c("train", "test"))
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -86,7 +87,7 @@ ids <- unique(df_modeling$id)
 
 # model N times with randomly sampled ids and save results
 set.seed(1)
-boot_results <- map_dfr(seq_len(50), function(i) {
+boot_results <- map_dfr(seq_len(200), function(i) {
   tictoc::tic()
   print(i)
   boot_ids <- sample(ids, size = length(ids), replace = TRUE) 
