@@ -5,8 +5,6 @@ library(tidymodels)
 df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
 df_modeling <- df_modeling |> filter(train_test %in% c("train", "test"))
 
-# -------------------------------------------------------------------------------------------------------------------------------------
-
 # helper for fitting and evaluating model once 
 fit_eval_once_oob <- function(df, boot_ids, threshold = 0.55) {
   
@@ -80,8 +78,6 @@ fit_eval_once_oob <- function(df, boot_ids, threshold = 0.55) {
   )
 }
 
-# -------------------------------------------------------------------------------------------------------------------------------------
-
 # get list of ids for sampling
 ids <- unique(df_modeling$id)
 
@@ -97,35 +93,4 @@ boot_results <- map_dfr(seq_len(200), function(i) {
   return(mutate(res, iter = i))
 })
 
-boot_summary <- boot_results |>
-  summarise(
-    bal_acc_mean = mean(bal_acc),
-    bal_acc_sd   = sd(bal_acc),
-    bal_acc_lo   = quantile(bal_acc, 0.025),
-    bal_acc_hi   = quantile(bal_acc, 0.975),
-    auc_mean     = mean(auc),
-    auc_sd       = sd(auc)
-  ) 
-print(boot_summary)
-
-# balanced accuracy distribution
-hist(
-  boot_results$bal_acc,
-  breaks = 15,
-  main = "Boostrapped results",
-  xlab = "Balanced accuracy"
-)
-abline(v = median(boot_results$bal_acc), lty = 2, lwd = 2)
-abline(v = boot_summary$bal_acc_mean + 2*(boot_summary$bal_acc_sd), lty = 2, lwd = 1, col = "red")
-abline(v = boot_summary$bal_acc_mean - 2*(boot_summary$bal_acc_sd), lty = 2, lwd = 1, col = "red")
-
-# AUC distribution
-hist(
-  boot_results$auc,
-  breaks = 15,
-  main = "Boostrapped results",
-  xlab = "AUC"
-)
-abline(v = boot_summary$auc_mean, lty = 2, lwd = 2)
-abline(v = min(boot_summary$auc_mean + 2*(boot_summary$auc_sd), 1), lty = 2, lwd = 1, col = "red")
-abline(v = boot_summary$auc_mean - 2*(boot_summary$auc_sd), lty = 2, lwd = 1, col = "red")
+saveRDS(boot_results, "./data/interim/xgb_bootstrapped_results.RDS")
