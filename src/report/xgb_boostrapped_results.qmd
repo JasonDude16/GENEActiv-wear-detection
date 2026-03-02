@@ -1,0 +1,111 @@
+---
+title: "XGB- Boostrapped Results"
+author: "Jason Dude"
+format: 
+  html: 
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+boot_results <- readRDS("../../data/interim/xgb_bootstrapped_results.RDS")
+```
+
+```{r}
+boot_running_ci <- boot_results |>
+  arrange(iter) |>
+  mutate(B = row_number()) |>
+  mutate(
+    bal_acc_lo = map_dbl(B, ~ quantile(bal_acc[1:.x], 0.025, na.rm = TRUE)),
+    bal_acc_hi = map_dbl(B, ~ quantile(bal_acc[1:.x], 0.975, na.rm = TRUE)),
+    bal_acc_mean = map_dbl(B, ~ mean(bal_acc[1:.x], na.rm = TRUE)),
+    auc_lo = map_dbl(B, ~ quantile(auc[1:.x], 0.025, na.rm = TRUE)),
+    auc_hi = map_dbl(B, ~ quantile(auc[1:.x], 0.975, na.rm = TRUE)),
+    auc_mean = map_dbl(B, ~ mean(auc[1:.x], na.rm = TRUE))
+  )
+
+boot_running_ci |>
+  select(B, bal_acc_mean, bal_acc_lo, bal_acc_hi) |>
+  slice(c(10, 25, 50, 100, 150, 200))
+
+boot_running_ci |>
+  ggplot(aes(x = B, y = bal_acc_mean)) +
+  geom_ribbon(aes(ymin = bal_acc_lo, ymax = bal_acc_hi), alpha = 0.2) +
+  geom_line() +
+  labs(
+    title = "Bootstrap convergence: Balanced Accuracy",
+    x = "Number of bootstrap samples (B)",
+    y = "Balanced accuracy (running mean) with 95% percentile CI"
+  )
+
+boot_running_ci |>
+  ggplot(aes(x = B, y = auc_mean)) +
+  geom_ribbon(aes(ymin = auc_lo, ymax = auc_hi), alpha = 0.2) +
+  geom_line() +
+  labs(
+    title = "Bootstrap convergence: AUC",
+    x = "Number of bootstrap samples (B)",
+    y = "AUC (running mean) with 95% percentile CI"
+  )
+
+boot_running_ci |>
+  mutate(
+    bal_acc_width = bal_acc_hi - bal_acc_lo,
+    auc_width = auc_hi - auc_lo
+  ) |>
+  ggplot(aes(x = B, y = bal_acc_width)) +
+  geom_line() +
+  labs(
+    title = "CI width convergence: Balanced Accuracy",
+    x = "Number of bootstrap samples (B)",
+    y = "95% CI width"
+  )
+
+boot_running_ci |>
+  mutate(auc_width = auc_hi - auc_lo) |>
+  ggplot(aes(x = B, y = auc_width)) +
+  geom_line() +
+  labs(
+    title = "CI width convergence: AUC",
+    x = "Number of bootstrap samples (B)",
+    y = "95% CI width"
+  )
+
+boot_summary <- boot_results |>
+  summarise(
+    bal_acc_mean = mean(bal_acc),
+    bal_acc_sd = sd(bal_acc),
+    bal_acc_lo = quantile(bal_acc, 0.025),
+    bal_acc_hi = quantile(bal_acc, 0.975),
+    auc_mean = mean(auc),
+    auc_sd = sd(auc)
+  ) 
+print(boot_summary)
+
+# balanced accuracy distribution
+hist(
+  boot_results$bal_acc,
+  breaks = 15,
+  main = "Boostrapped results",
+  xlab = "Balanced accuracy"
+)
+abline(v = median(boot_results$bal_acc), lty = 2, lwd = 2)
+abline(v = boot_summary$bal_acc_mean + 2*(boot_summary$bal_acc_sd), lty = 2, lwd = 1, col = "red")
+abline(v = boot_summary$bal_acc_mean - 2*(boot_summary$bal_acc_sd), lty = 2, lwd = 1, col = "red")
+
+# AUC distribution
+hist(
+  boot_results$auc,
+  breaks = 15,
+  main = "Boostrapped results",
+  xlab = "AUC"
+)
+abline(v = boot_summary$auc_mean, lty = 2, lwd = 2)
+abline(v = min(boot_summary$auc_mean + 2*(boot_summary$auc_sd), 1), lty = 2, lwd = 1, col = "red")
+abline(v = boot_summary$auc_mean - 2*(boot_summary$auc_sd), lty = 2, lwd = 1, col = "red")
+
+```
