@@ -5,6 +5,8 @@ format:
   html: 
     embed-resources: true
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r}
@@ -32,49 +34,50 @@ boot_running_ci |>
   select(B, bal_acc_mean, bal_acc_lo, bal_acc_hi) |>
   slice(c(10, 25, 50, 100, 150, 200))
 
-boot_running_ci |>
-  ggplot(aes(x = B, y = bal_acc_mean)) +
-  geom_ribbon(aes(ymin = bal_acc_lo, ymax = bal_acc_hi), alpha = 0.2) +
-  geom_line() +
-  labs(
-    title = "Bootstrap convergence: Balanced Accuracy",
-    x = "Number of bootstrap samples (B)",
-    y = "Balanced accuracy (running mean) with 95% percentile CI"
-  )
+gridExtra::grid.arrange(
+  boot_running_ci |>
+    ggplot(aes(x = B, y = bal_acc_mean)) +
+    geom_ribbon(aes(ymin = bal_acc_lo, ymax = bal_acc_hi), alpha = 0.2) +
+    geom_line() +
+    labs(
+      title = "Bootstrap convergence: Balanced Accuracy",
+      x = "Number of bootstrap samples (B)",
+      y = "Balanced accuracy (running mean) with 95% percentile CI"
+    ),
+  boot_running_ci |>
+    mutate(
+      bal_acc_width = bal_acc_hi - bal_acc_lo,
+      auc_width = auc_hi - auc_lo
+    ) |>
+    ggplot(aes(x = B, y = bal_acc_width)) +
+    geom_line() +
+    labs(
+      title = "CI width convergence: Balanced Accuracy",
+      x = "Number of bootstrap samples (B)",
+      y = "95% CI width"
+    ),
+  boot_running_ci |>
+    ggplot(aes(x = B, y = auc_mean)) +
+    geom_ribbon(aes(ymin = auc_lo, ymax = auc_hi), alpha = 0.2) +
+    geom_line() +
+    labs(
+      title = "Bootstrap convergence: AUC",
+      x = "Number of bootstrap samples (B)",
+      y = "AUC (running mean) with 95% percentile CI"
+    ),
+  boot_running_ci |>
+    mutate(auc_width = auc_hi - auc_lo) |>
+    ggplot(aes(x = B, y = auc_width)) +
+    geom_line() +
+    labs(
+      title = "CI width convergence: AUC",
+      x = "Number of bootstrap samples (B)",
+      y = "95% CI width"
+    ) 
+)
+```
 
-boot_running_ci |>
-  ggplot(aes(x = B, y = auc_mean)) +
-  geom_ribbon(aes(ymin = auc_lo, ymax = auc_hi), alpha = 0.2) +
-  geom_line() +
-  labs(
-    title = "Bootstrap convergence: AUC",
-    x = "Number of bootstrap samples (B)",
-    y = "AUC (running mean) with 95% percentile CI"
-  )
-
-boot_running_ci |>
-  mutate(
-    bal_acc_width = bal_acc_hi - bal_acc_lo,
-    auc_width = auc_hi - auc_lo
-  ) |>
-  ggplot(aes(x = B, y = bal_acc_width)) +
-  geom_line() +
-  labs(
-    title = "CI width convergence: Balanced Accuracy",
-    x = "Number of bootstrap samples (B)",
-    y = "95% CI width"
-  )
-
-boot_running_ci |>
-  mutate(auc_width = auc_hi - auc_lo) |>
-  ggplot(aes(x = B, y = auc_width)) +
-  geom_line() +
-  labs(
-    title = "CI width convergence: AUC",
-    x = "Number of bootstrap samples (B)",
-    y = "95% CI width"
-  )
-
+```{r}
 boot_summary <- boot_results |>
   summarise(
     bal_acc_mean = mean(bal_acc),
@@ -107,5 +110,4 @@ hist(
 abline(v = boot_summary$auc_mean, lty = 2, lwd = 2)
 abline(v = min(boot_summary$auc_mean + 2*(boot_summary$auc_sd), 1), lty = 2, lwd = 1, col = "red")
 abline(v = boot_summary$auc_mean - 2*(boot_summary$auc_sd), lty = 2, lwd = 1, col = "red")
-
 ```
