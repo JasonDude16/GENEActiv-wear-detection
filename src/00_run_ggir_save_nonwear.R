@@ -1,6 +1,7 @@
 library(GGIR)
 library(GGIRread)
 library(stringr)
+source("src/helpers.R")
 
 outputdir <- "./data/ggir"
 

@@ -39,20 +39,23 @@ read_event_markers <- function(file) {
     nrow(df) %% 2 == 0,
     all(df$`Are you taking the watch off or putting it on?` == valid_seq)
   )
-  
+
   df <- df |>
     arrange(Timestamp) |>
     mutate(event = `Are you taking the watch off or putting it on?`) |>
     mutate(interval_id = cumsum(event == "Putting the watch on")) |>
     group_by(interval_id) |>
     summarise(
+      id = get_id_from_root(file),
       on_wrist_start = Timestamp[event == "Putting the watch on"][1],
       on_wrist_end   = Timestamp[event == "Taking the watch off"][1],
       .groups = "drop"
     ) |>
-    select(on_wrist_start, on_wrist_end)
-  
-  df$id <- get_id_from_root(file)
+    mutate(
+      on_duration = on_wrist_end - on_wrist_start,
+      off_duration = dplyr::lead(on_wrist_start) - on_wrist_end,
+    ) |> 
+    select(-interval_id)
   
   return(df)
 }
@@ -68,47 +71,62 @@ adjust_log_time <- function(raw_time, log_time) {
 }
 
 labels_to_long_format <- function(df_events) {
-  label_is_worn <- data.frame(matrix(ncol = 2, nrow = 0))
-  colnames(label_is_worn) <- c("date_time", "label_is_worn")
-  for (i in seq_along(1:nrow(df_events))) {
-    wear <- seq(df_events$on_wrist_start[i], df_events$on_wrist_end[i], 30)
-    df_wear <- data.frame("date_time" = wear, label_is_worn = "wear")
+  label_is_worn <- data.frame(
+    date_time = as.POSIXct(character()),
+    label_is_worn = character()
+  )
+  
+  for (i in seq_len(nrow(df_events))) {
+    
+    wear <- seq(
+      from = df_events$on_wrist_start[i],
+      to   = df_events$on_wrist_end[i],
+      by   = 60
+    )
+    
+    df_wear <- data.frame(
+      date_time = wear,
+      label_is_worn = "wear"
+    )
+    
     label_is_worn <- rbind(label_is_worn, df_wear)
+    
     if (i < nrow(df_events)) {
-      non_wear <- seq(df_events$on_wrist_end[i] + 30, df_events$on_wrist_start[i+1] - 30, 30)    
-      df_non_wear <- data.frame("date_time" = non_wear, label_is_worn = "non-wear")
+      
+      non_wear <- seq(
+        from = df_events$on_wrist_end[i] + 60,
+        to   = df_events$on_wrist_start[i + 1] - 60,
+        by   = 60
+      )
+      
+      df_non_wear <- data.frame(
+        date_time = non_wear,
+        label_is_worn = "non-wear"
+      )
+      
       label_is_worn <- rbind(label_is_worn, df_non_wear)
     }
-  } 
+  }
+  
   return(label_is_worn)
 }
 
 merge_events <- function(df_raw, df_ggir, df_events = NULL) {
-  
   diffs <- second(df_raw$date_time[1]) - seq(0, 59, 5)
   offset <- diffs[which.min(abs(diffs))]
   df_ggir$date_time <- df_ggir$date_time + seconds(offset)
+
+  df_events <- df_events |> 
+    mutate(
+      on_wrist_start = adjust_log_time(df_raw$date_time, df_events$on_wrist_start),
+      on_wrist_end = adjust_log_time(df_raw$date_time, df_events$on_wrist_end)
+    )
   
-  if (!is.null(df_events)) {
-    df_events <- df_events |> 
-      mutate(
-        on_wrist_start = adjust_log_time(df_raw$date_time, df_events$on_wrist_start),
-        on_wrist_end = adjust_log_time(df_raw$date_time, df_events$on_wrist_end)
-      )
-    
-    res_labels_long <- labels_to_long_format(df_events) 
-    df_merged <- reduce(list(df_raw, df_ggir, res_labels_long), left_join)
-    df_merged$label_is_worn[is.na(df_merged$label_is_worn)] <- "non-wear"
-    df_merged$is_validation <- TRUE
-    
-  } else {
-    df_merged <- reduce(list(df_raw, df_ggir), left_join)
-    df_merged$is_validation <- FALSE
-    
-  }
-  
+  res_labels_long <- labels_to_long_format(df_events) 
+  df_merged <- reduce(list(df_raw, df_ggir, res_labels_long), left_join)
+  df_merged$label_is_worn[is.na(df_merged$label_is_worn)] <- "non-wear"
+
   return(list("df_merged" = df_merged, "df_events" = df_events))
-  
 }
 
 parse_ms <- function(x, tz = "America/Denver") {
