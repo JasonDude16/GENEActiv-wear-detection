@@ -7,28 +7,14 @@ data_ggir_nonwear <- data_ggir_nonwear |> select(-anglez, -ENMO) |> mutate(date_
 data_ggir_nonwear <- split(data_ggir_nonwear, f = data_ggir_nonwear$id)
 
 # get validation csvs 
-files <- list.files("./data/validation/raw/csv/", full.names = T, pattern = ".csv")
-df_raw_validation <- map(files, read_geneactiv_csv_raw)
-ids <- reduce(map(files, ~stringr::str_c(strsplit(basename(.x), "-")[[1]][1], collapse = "")), c)
-names(df_raw_validation) <- ids
+files <- list.files("./data/validation2/", recursive = TRUE, full.names = T, pattern = ".csv")
+df_raw <- map(files, read_geneactiv_csv_raw)
+ids <- reduce(map(files, ~get_id_from_root(.x)), c)
+names(df_raw) <- ids
 
-# get regular (non-validation) csvs 
-files <- list.files("./data/raw/csv/", full.names = T, pattern = ".csv")
-df_raw_non_validation <- map(files, read_geneactiv_csv_raw)
-ids <- reduce(map(files, ~stringr::str_c(strsplit(basename(.x), "-")[[1]][1], collapse = "")), c)
-names(df_raw_non_validation) <- ids
-
-df_raw <- c(df_raw_validation, df_raw_non_validation)
-
-files <- list.files("./data/validation/events/", full.names = T, pattern = ".csv")
-df_events <- map(files, read_csv_event_markers)
-
-ids <- reduce(map(files, function(file) {
-  id_tmp <- strsplit(stringr::str_remove(basename(file), ".csv"), "")[[1]]
-  id <- stringr::str_c(id_tmp[(length(id_tmp)-1):length(id_tmp)], collapse = "")
-  return(id)
-}), c)
-names(df_events) <- ids
+files <- list.files("./data/validation2/", recursive = TRUE, full.names = TRUE, pattern = "On-Offwrist")
+df_events <- map(files, read_event_markers)
+names(df_events) <- stringr::str_extract(basename(files), "WATCH[0-9]{2}")
 
 ids <- unique(Reduce(c, lapply(list(df_raw, df_events, data_ggir_nonwear), names)))
 df_merged_lists <- setNames(

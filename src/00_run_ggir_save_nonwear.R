@@ -2,20 +2,20 @@ library(GGIR)
 library(GGIRread)
 library(stringr)
 
-validation_files <- list.files("./data/validation/raw/bin/", full.names = TRUE)
-non_validation_files <- list.files("./data/raw/bin/", full.names = TRUE)
 outputdir <- "./data/ggir"
 
-for (file in c(validation_files, non_validation_files)) {
+validation_files <- list.files(
+  "./data/validation2/",
+  pattern = ".bin",
+  full.names = TRUE,
+  recursive = TRUE
+)
+validation_files <- validation_files[!str_detect(validation_files, "partial")]
+
+for (file in validation_files) {
   
-  id <- stringr::str_c((strsplit(basename(file), "-")[[1]][1]), collapse = "")
+  id <- get_id_from_root(file)
   fn <- file.path(outputdir, paste0("output_", id))
-  if (stringr::str_detect(file, "validation")) {
-    fn <- paste0(fn, "_validation")
-    study_name <- paste0(id, "_validation")
-  } else {
-    study_name <- id
-  }
   
   if (file.exists(fn)) {
     next
@@ -26,7 +26,7 @@ for (file in c(validation_files, non_validation_files)) {
     mode = c(1, 2, 3, 4, 5),
     datadir = file,
     outputdir = outputdir,
-    studyname = study_name,
+    studyname = id,
     do.report = c(2, 4, 5),
     overwrite = TRUE,
     windowsizes = c(5, 900, 3600),
@@ -72,7 +72,7 @@ for (file in c(validation_files, non_validation_files)) {
   )  
 }
 
-folders <- list.files(outputdir)
+folders <- list.files(outputdir, pattern = "WATCH")
 df_nonwear <- purrr::map_dfr(folders, function(folder) {
   file <- list.files(file.path(outputdir, folder, "meta", "basic"), full.names = T)
   folder <- str_remove(folder, "output_")
