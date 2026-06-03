@@ -1,3 +1,7 @@
+get_id_from_root <- function(path) {
+  strsplit(dirname(path), "/")[[1]][5]
+}
+
 read_geneactiv_csv_raw <- function(file) {
   
   col_names <- c(
@@ -21,23 +25,34 @@ read_geneactiv_csv_raw <- function(file) {
     header = FALSE,
     col.names = col_names
   )
-  df$id <- stringr::str_c(strsplit(basename(file), "-")[[1]][1], collapse = "")
+  df$id <- get_id_from_root(file)
   df$date_time <- parse_ms(as.POSIXct(df$date_time, tz = "America/Denver"))
   
   return(df)
 }
 
-read_csv_event_markers <- function(file) {
-  df <- read.csv(file, col.names = c("on_wrist_start", "on_wrist_end", "run"))
+read_event_markers <- function(file) {
+  df <- readxl::read_excel(file)
   
-  df <- df |> 
-    mutate(
-      on_wrist_start = parse_ms(format(mdy_hm(on_wrist_start), "%Y-%m-%d %H:%M:%S:000")),
-      on_wrist_end = parse_ms(format(mdy_hm(on_wrist_end), "%Y-%m-%d %H:%M:%S:000"))
-    )
+  valid_seq <- rep(c("Putting the watch on", "Taking the watch off"), nrow(df)/2)
+  stopifnot(
+    nrow(df) %% 2 == 0,
+    all(df$`Are you taking the watch off or putting it on?` == valid_seq)
+  )
   
-  id_tmp <- strsplit(stringr::str_remove(basename(file), ".csv"), "")[[1]]
-  df$id <- stringr::str_c(id_tmp[(length(id_tmp)-1):length(id_tmp)], collapse = "")
+  df <- df |>
+    arrange(Timestamp) |>
+    mutate(event = `Are you taking the watch off or putting it on?`) |>
+    mutate(interval_id = cumsum(event == "Putting the watch on")) |>
+    group_by(interval_id) |>
+    summarise(
+      on_wrist_start = Timestamp[event == "Putting the watch on"][1],
+      on_wrist_end   = Timestamp[event == "Taking the watch off"][1],
+      .groups = "drop"
+    ) |>
+    select(on_wrist_start, on_wrist_end)
+  
+  df$id <- get_id_from_root(file)
   
   return(df)
 }
@@ -69,7 +84,7 @@ labels_to_long_format <- function(df_events) {
 }
 
 merge_events <- function(df_raw, df_ggir, df_events = NULL) {
-
+  
   diffs <- second(df_raw$date_time[1]) - seq(0, 59, 5)
   offset <- diffs[which.min(abs(diffs))]
   df_ggir$date_time <- df_ggir$date_time + seconds(offset)
@@ -80,12 +95,11 @@ merge_events <- function(df_raw, df_ggir, df_events = NULL) {
         on_wrist_start = adjust_log_time(df_raw$date_time, df_events$on_wrist_start),
         on_wrist_end = adjust_log_time(df_raw$date_time, df_events$on_wrist_end)
       )
-
+    
     res_labels_long <- labels_to_long_format(df_events) 
     df_merged <- reduce(list(df_raw, df_ggir, res_labels_long), left_join)
     df_merged$label_is_worn[is.na(df_merged$label_is_worn)] <- "non-wear"
     df_merged$is_validation <- TRUE
-    df_merged$run <- df_events$run[1]
     
   } else {
     df_merged <- reduce(list(df_raw, df_ggir), left_join)
