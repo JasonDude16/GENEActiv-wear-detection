@@ -50,7 +50,7 @@ ui <- fluidPage(
         label = "Classifiers",
         choices = c("Truth", "GGIR", models),
         multiple = TRUE,
-        selected = c("Truth", "Model")
+        selected = c("Truth")
       ),
       sliderInput(
         "prob",
@@ -194,7 +194,7 @@ server <- function(input, output, session) {
       ))
     
     # If validation, recompute metrics on the FILTERED window
-    if (isTRUE(d_subj$is_validation[1]) && length(setdiff(input$classifiers, "Truth")) > 0) {
+    if (length(setdiff(input$classifiers, "Truth")) > 0) {
       
       res <- d_pred |>
         plot_confusion_matrix(
@@ -233,13 +233,13 @@ server <- function(input, output, session) {
       paste0("wear_nonwear_", input$id, "_", Sys.Date(), ".", input$save_type)
     },
     content = function(file) {
-      ggplot2::ggsave(
-        filename = file,
-        plot = plot_obj(),
-        height = input$height*4,
-        width = input$width*4,
-        units = "px"
-      )
+      if (input$save_type == "pdf") {
+        grDevices::pdf(file, width = input$width * 4 / 72, height = input$height * 4 / 72)
+      } else {
+        grDevices::png(file, width = input$width * 4, height = input$height * 4)
+      }
+      grid::grid.draw(plot_obj())
+      grDevices::dev.off()
     }
   )
 }

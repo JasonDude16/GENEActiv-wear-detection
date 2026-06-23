@@ -2,7 +2,7 @@ library(dplyr)
 library(tidymodels)
 
 df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
-df_train <- df_modeling |> filter(train_test == "train")
+df_train <- df_modeling |> filter(train_test == "train", !is.na(label_is_worn), !is.na(ggir_is_worn))
 
 rec <- recipe(
   label_is_worn ~ 
@@ -17,7 +17,7 @@ rec <- recipe(
   step_dummy(ggir_is_worn) |> 
   step_normalize(all_predictors())
 
-# XGBoost specifications
+# logreg specifications
 logreg_spec <- logistic_reg(
   mode = "classification", 
   engine = "glm"

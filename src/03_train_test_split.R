@@ -1,11 +1,7 @@
 library(dplyr)
 library(tidymodels)
 
-df_features <- map_dfr(list.files("./data/features/", full.names = TRUE), read.csv)
-
-df_kv <- df_features |> filter(id == "KV")
-df_kv_sliced <- df_kv |> slice(1:round(nrow(df_kv)/2))
-df_features <- df_features |> filter(id != "KV") |> rbind(df_kv_sliced)
+df_features <- map_dfr(list.files("./data/features/", full.names = TRUE, pattern = "WATCH"), read.csv)
 
 df_features <- df_features |> 
   mutate(
@@ -18,14 +14,9 @@ df_features <- df_features |>
     ))
   )
 
-# subset to validation and non-validation
-df_features_validation <- df_features |> filter(is_validation)
-df_features_non_validation <- df_features |> filter(!is_validation)
-df_features_non_validation$train_test <- NA
-
 set.seed(111)
 split_obj <- group_initial_split(
-  df_features_validation,
+  df_features,
   group = id,
   prop = 0.7
 )
@@ -49,7 +40,7 @@ df_test |>
   ungroup() |> 
   mutate(prop = count / sum(count))
 
-df_all <- rbind(df_train, df_test, df_features_non_validation)
+df_all <- rbind(df_train, df_test)
 
 # re-order for clarity (all non-features listed first in dataset)
 df_all <- df_all |> 
@@ -59,8 +50,6 @@ df_all <- df_all |>
     label_is_worn,
     ggir_is_worn,
     train_test,
-    is_validation,
-    run,
     button_press_time_sum,
     everything()
 )

@@ -33,22 +33,39 @@ read_geneactiv_csv_raw <- function(file) {
 
 read_event_markers <- function(file) {
   df <- readxl::read_excel(file)
-  
-  valid_seq <- rep(c("Putting the watch on", "Taking the watch off"), nrow(df)/2)
-  stopifnot(
-    nrow(df) %% 2 == 0,
-    all(df$`Are you taking the watch off or putting it on?` == valid_seq)
-  )
 
+  # in some cases a column was added to the log and the word "test" was added to a row indicating 
+  # that it was not a true log by the participant
+  if (ncol(df) == 6) {
+    res <- stringr::str_detect(tolower(df[6][[1]]), "test")
+    df <- df[!ifelse(is.na(res), FALSE, res), ]
+  }
+  
+  # valid_seq <- rep(c("Putting the watch on", "Taking the watch off"), nrow(df)/2)
+  # stopifnot(
+  #   nrow(df) %% 2 == 0,
+  #   all(df$`Are you taking the watch off or putting it on?` == valid_seq)
+  # )
+  
+  # note that the timestamp column shouldn't be used here because that is when the survey is recorded, but 
+  # a ppt may be logging the event at a later time, which should be indicated in the other columns
   df <- df |>
+    mutate(
+      time_of_event = update(
+        `What is today's date`,
+        hour   = hour(`What time is it now?`),
+        minute = minute(`What time is it now?`),
+        second = second(`What time is it now?`)
+      )
+    ) |> 
     arrange(Timestamp) |>
     mutate(event = `Are you taking the watch off or putting it on?`) |>
     mutate(interval_id = cumsum(event == "Putting the watch on")) |>
     group_by(interval_id) |>
     summarise(
       id = get_id_from_root(file),
-      on_wrist_start = Timestamp[event == "Putting the watch on"][1],
-      on_wrist_end   = Timestamp[event == "Taking the watch off"][1],
+      on_wrist_start = time_of_event[event == "Putting the watch on"][1],
+      on_wrist_end   = time_of_event[event == "Taking the watch off"][1],
       .groups = "drop"
     ) |>
     mutate(
@@ -61,11 +78,12 @@ read_event_markers <- function(file) {
 }
 
 adjust_log_time <- function(raw_time, log_time) {
+  # this simple method works because ppts are logging events at the minute-level, not second
   raw_sec <- second(raw_time)[1]
   if (raw_sec > 30) {
-    time_adj <- parse_ms(log_time) - (60 - seconds(raw_sec))  
+    time_adj <- force_tz(log_time, tzone = "America/Denver") - (60 - seconds(raw_sec))  
   } else {
-    time_adj <- parse_ms(log_time) + seconds(raw_sec)
+    time_adj <- force_tz(log_time, tzone = "America/Denver") + seconds(raw_sec)
   }
   return(time_adj)  
 }
@@ -112,6 +130,7 @@ labels_to_long_format <- function(df_events) {
 }
 
 merge_events <- function(df_raw, df_ggir, df_events = NULL) {
+  # 5 second intervals because that is what GGIR uses
   diffs <- second(df_raw$date_time[1]) - seq(0, 59, 5)
   offset <- diffs[which.min(abs(diffs))]
   df_ggir$date_time <- df_ggir$date_time + seconds(offset)
@@ -124,13 +143,15 @@ merge_events <- function(df_raw, df_ggir, df_events = NULL) {
   
   res_labels_long <- labels_to_long_format(df_events) 
   df_merged <- reduce(list(df_raw, df_ggir, res_labels_long), left_join)
-  df_merged$label_is_worn[is.na(df_merged$label_is_worn)] <- "non-wear"
 
   return(list("df_merged" = df_merged, "df_events" = df_events))
 }
 
 parse_ms <- function(x, tz = "America/Denver") {
-  ymd_hms(sub(":(\\d{3})$", ".\\1", x), tz = tz)
+  x <- trimws(x)
+  x <- sub("\\s+UTC$", "", x)
+  x <- sub(":(\\d{3})$", ".\\1", x)
+  ymd_hms(x, tz = tz)
 }
 
 # -------------------------------------------------------------------------------------------------------------------------------------

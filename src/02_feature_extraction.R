@@ -5,8 +5,8 @@ library(slider)
 library(purrr)
 source("./src/helpers.R")
 
-df <- readRDS("./data/interim/data_merged.RDS")$df
-df_list <- df |> group_split(id)
+df_merged <- readRDS("./data/interim/data_merged.RDS")$df
+df_list <- df_merged |> group_split(id)
 outpath <- "./data/features/"
 
 for (df in df_list) {
@@ -22,7 +22,7 @@ for (df in df_list) {
   }
   
   # parameters
-  epoch_min <- 0.5
+  epoch_min <- 1 # NOTE: if data are exported at something other than 60s intervals, this needs to be changed
   win_mins <- c(5, 10, 20, 60) # rolling windows in minutes
   win_n <- as.integer(win_mins / epoch_min)
   
@@ -95,10 +95,11 @@ for (df in df_list) {
     df[[paste0("corr_temp_activity_", label)]] <- slider::slide_dbl(
       seq_along(temp),
       function(idx) {
-        i0 <- max(1, idx - (w - 1))
-        corr_safe(temp[i0:idx], activity[i0:idx])
+        i <- tail(idx, 1)
+        i0 <- max(1, i - (w - 1))
+        corr_safe(temp[i0:i], activity[i0:i])
       },
-      .complete = TRUE
+      .before = w - 1, .complete = TRUE
     )
     
     # A very useful indicator feature: low activity + cooling trend

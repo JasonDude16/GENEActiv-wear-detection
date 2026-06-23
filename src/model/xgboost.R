@@ -2,7 +2,7 @@ library(dplyr)
 library(tidymodels)
 
 df_modeling <- readRDS("./data/modeling/df_modeling.RDS")
-df_train <- df_modeling |> filter(train_test == "train")
+df_train <- df_modeling |> filter(train_test == "train", !is.na(label_is_worn), !is.na(ggir_is_worn))
 
 non_predictors <- c(
   "date_time",
@@ -31,7 +31,7 @@ xgb_spec <- boost_tree(
   sample_size = 0.7,  
   mtry = 0.5,          
   loss_reduction = 5
-) %>%
+) |> 
   set_engine("xgboost", counts = FALSE) |>
   set_mode("classification")
 
